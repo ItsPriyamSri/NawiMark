@@ -1,0 +1,22 @@
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+*.pem
+.DS_Store
+/postgres-data/
+/uploads/
+dist/
+coverage/
+__pycache__/
+*.pyc
+.venv/
+
+# Local agent / war-room notes — not part of the public product tree
+docs/
+HANDOFF.md
+AGENTS.md
+CLAUDE.md
+engine/README.md
+
