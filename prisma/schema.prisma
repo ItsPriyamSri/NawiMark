@@ -1,0 +1,115 @@
+// NawiMark — Task 3 schema. See docs/superpowers/plans/2026-08-28-nawimark-wave1.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  TESTER
+  REVIEWER
+}
+
+enum EvalStatus {
+  IN_PROCESS
+  COMPLETED
+}
+
+enum ReviewDecision {
+  NONE
+  GRANTED
+  REFUSED
+}
+
+enum ProcedureKey {
+  WEIGHING
+  ECCENTRICITY
+  REPEATABILITY
+  TARE
+  DISCRIMINATION
+  SENSITIVITY
+  ZERO_RETURN
+  CREEP
+  STABILITY
+  TILT
+  WARMUP
+  VOLTAGE
+  TEMP_NOLOAD
+  DAMP_HEAT
+  SPAN_STABILITY
+  ENDURANCE
+  ROLLING_ECC
+  EMC
+  CONSTRUCTION
+  CHECKLIST
+}
+
+enum ProcedureStatus {
+  EMPTY
+  ENTERED_NOT_MARKED
+  MARKED_PASS
+  MARKED_FAIL
+  CANNOT_COMPUTE
+}
+
+model User {
+  id           String @id @default(cuid())
+  email        String @unique
+  passwordHash String
+  role         Role
+}
+
+model Instrument {
+  id           String       @id @default(cuid())
+  manufacturer String
+  model        String
+  class        String // I II III IIII
+  maxG         String // Decimal as string
+  eG           String
+  n            Int?
+  createdById  String
+  evaluations  Evaluation[]
+}
+
+model Evaluation {
+  id             String         @id @default(cuid())
+  instrumentId   String
+  instrument     Instrument     @relation(fields: [instrumentId], references: [id])
+  status         EvalStatus     @default(IN_PROCESS)
+  packId         String // "R-76 pack v1"
+  tempC          String?
+  rhPct          String?
+  observer       String?
+  reviewDecision ReviewDecision @default(NONE)
+  reviewNote     String?
+  reviewerId     String?
+  reviewedAt     DateTime?
+  procedures     Procedure[]
+  attachments    Attachment[]
+  reportPdfPath  String?
+  reportDocxPath String?
+}
+
+model Procedure {
+  id           String          @id @default(cuid())
+  evaluationId String
+  evaluation   Evaluation      @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  key          ProcedureKey
+  status       ProcedureStatus @default(EMPTY)
+  payloadJson  Json // observations
+  resultJson   Json? // engine output
+  markedByPack String?
+}
+
+model Attachment {
+  id           String     @id @default(cuid())
+  evaluationId String
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  filename     String
+  path         String
+  mime         String
+}

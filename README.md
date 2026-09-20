@@ -4,33 +4,50 @@ Type-evaluation reports for non-automatic weighing instruments, against OIML R-7
 
 Built for Smart India Hackathon 2026 problem statement **SIH26035** (Department of Consumer Affairs). Lab staff enter observations from the bench; NawiMark validates, marks, and produces the report. It does not operate a scale.
 
-## Wave 1
-
-- Sign in as tester or reviewer
-- Record instrument identity and test environment
-- Enter observations for weighing, four-corner eccentricity, and repeatability
-- Mark against OIML R-76 Table 6 **initial** (type evaluation), not the 2× in-service band
-- Export PDF and Word
-- Reviewer grant or refuse
-
-Other R-76-2 sections are captured as forms. They are never auto-passed, including EMC and construction/software checklists.
-
-The default demo is a near-miss **fail**: 11 g error where 10 g is allowed on the type-eval band. The same instrument would pass shop verification at 2× — we still fail, because this product is model approval, not in-service inspection.
-
 eMaap / RRSL integrations are **mocked** and labelled as such.
 
-## Engine check
+## What it does
+
+- Sign in as tester or reviewer (mocked demo accounts)
+- Record instrument identity and lab environment
+- Enter observations for every numeric R-76 sheet we name (weighing, 4-corner eccentricity, repeatability, tare, discrimination, sensitivity, zero return, creep, stability, tilt, warm-up, voltage, temperature no-load, damp heat, span stability, endurance, rolling-load eccentricity)
+- EMC, construction examination, and the software checklist are forms only. They never auto-PASS
+- Mark against OIML R-76 Table 6 **initial** (type evaluation), not the 2× in-service band
+- A demo toggle shows the same readings under shop 2×. Stored marks stay type-eval
+- Export PDF and Word with the same explainer
+- Attach photos and supporting documents
+- Reviewer grant or refuse model approval
+
+The default demo is a near-miss **fail**: 11 g error where 10 g is allowed on the type-eval band. The same instrument would pass shop verification at 2× — we still fail. A second seeded evaluation on the same instrument passes every numeric mark so Grant can be shown. `JunkScale / ILLEGAL-n` is a cannot-compute fixture (class III, n=30000).
+
+## Run it
 
 ```bash
-python3 engine/check.py
+docker compose up -d
+cp .env.example .env          # fill AUTH_SECRET and DEMO_PASSWORD
+npm install
+npx prisma migrate deploy
+npx prisma db seed
+npm run dev
 ```
 
-Must print `ALIVE 6/6 held-out correct`.
+Checks:
 
-## Stack (target)
+```bash
+python3 engine/check.py       # ALIVE 6/6 held-out correct
+npx vitest run src/engine/r76.test.ts
+bash scripts/smoke.sh         # needs pdftotext + unzip
+npx tsx scripts/gen-methodology.ts
+```
 
-Next.js App Router, TypeScript, Tailwind, shadcn/ui, PostgreSQL. One host.
+Demo logins (mocked, not a live RRSL): `tester@nawimark.local` and `reviewer@nawimark.local`, password from `DEMO_PASSWORD`.
+
+## Stack
+
+Next.js App Router, TypeScript, Tailwind, shadcn/ui, Postgres + Prisma. One host.
+
+Architecture, deployment, and the calculation methodology (generated from the pack, not written by hand) are in [`METHODOLOGY.md`](METHODOLOGY.md).
 
 ## Not in scope
 
-Live eMaap, EMC auto-PASS, LLM pass/fail, blockchain, microservices. Digital signatures are optional in the problem statement; Wave 1 uses timestamped reviewer sign-off first.
+Live eMaap, EMC auto-PASS, LLM pass/fail, blockchain, microservices. Digital signatures are optional in the problem statement; this build uses timestamped reviewer sign-off.

@@ -12,6 +12,11 @@ coverage/
 __pycache__/
 *.pyc
 .venv/
+/out/
+/build
+*.tsbuildinfo
+next-env.d.ts
+.impeccable/
 
 # Local agent / war-room notes — not part of the public product tree
 docs/
