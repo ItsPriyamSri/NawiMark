@@ -13,7 +13,7 @@ const db = new PrismaClient();
 async function main() {
   const candidates = await db.evaluation.findMany({
     where: { instrument: { model: "NW-30" } },
-    include: { instrument: true, procedures: true },
+    include: { instrument: true, procedures: true, attachments: true },
   });
   const evaluation =
     candidates.find((e) => {
@@ -25,7 +25,7 @@ async function main() {
   await markEvaluation(evaluation.id);
   const marked = await db.evaluation.findUniqueOrThrow({
     where: { id: evaluation.id },
-    include: { instrument: true, procedures: true },
+    include: { instrument: true, procedures: true, attachments: true },
   });
 
   mkdirSync("/tmp/nawimark-smoke", { recursive: true });

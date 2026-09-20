@@ -4,6 +4,8 @@
  * same instrument passes every numeric mark so Grant can be shown. An illegal
  * instrument is persisted so cannot-compute is visible — UI create still rejects it.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { hash } from "bcryptjs";
 import { Decimal } from "decimal.js";
 import { PrismaClient, ProcedureKey } from "@prisma/client";
@@ -137,6 +139,23 @@ async function main() {
   await markEvaluation(failEval.id);
   await markEvaluation(passEval.id);
   await markEvaluation(junkEval.id);
+
+  const noteName = "bench-note.txt";
+  const noteDir = path.join(process.cwd(), "uploads", failEval.id);
+  mkdirSync(noteDir, { recursive: true });
+  const stored = `seed-${noteName}`;
+  writeFileSync(
+    path.join(noteDir, stored),
+    "Mocked bench note. Not an RRSL scan. DemoCo NW-30, corner C 11 g vs allowed 10 g.\n",
+  );
+  await db.attachment.create({
+    data: {
+      evaluationId: failEval.id,
+      filename: noteName,
+      path: path.join("uploads", failEval.id, stored),
+      mime: "text/plain",
+    },
+  });
 
   console.log(`seeded: tester/reviewer, NW-30 + illegal n, fail ${failEval.id}, pass ${passEval.id}, junk ${junkEval.id}`);
 }

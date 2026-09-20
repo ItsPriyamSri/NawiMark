@@ -11,9 +11,11 @@ PDF=$(echo "$PATHS" | sed -n '1p')
 DOCX=$(echo "$PATHS" | sed -n '2p')
 
 test -f "$PDF" && test -f "$DOCX"
-pdftotext "$PDF" - | grep -q "11 g error"
-pdftotext "$PDF" - | grep -q "R-76 pack v1"
-pdftotext "$PDF" - | grep -q "FAIL"
+PDFTEXT=$(pdftotext "$PDF" -)
+echo "$PDFTEXT" | grep -q "11 g error"
+echo "$PDFTEXT" | grep -q "R-76 pack v1"
+echo "$PDFTEXT" | grep -q "FAIL"
+echo "$PDFTEXT" | grep -q "bench-note.txt"
 unzip -p "$DOCX" word/document.xml | grep -q "11 g error"
 
 echo "SMOKE OK"
