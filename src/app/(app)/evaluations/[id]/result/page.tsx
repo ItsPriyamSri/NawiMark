@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { PACK_ID, PACK_MARKS, PROCEDURE_LABELS } from "@/engine/pack";
 import { buildShowWorking, MPE_USED_LINE } from "@/lib/reports/explainer";
 import { AttachmentForm } from "./attachments";
@@ -159,22 +159,18 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
           <p className="text-xs text-destructive font-mono">No PDF or Word — {cannotReason}</p>
         ) : (
           <>
-            <Button
-              render={<a href={`/api/evaluations/${evaluation.id}/export?format=pdf`} />}
-              nativeButton={false}
-              variant="outline"
-              size="sm"
+            <a
+              href={`/api/evaluations/${evaluation.id}/export?format=pdf`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
             >
               Export PDF
-            </Button>
-            <Button
-              render={<a href={`/api/evaluations/${evaluation.id}/export?format=docx`} />}
-              nativeButton={false}
-              variant="outline"
-              size="sm"
+            </a>
+            <a
+              href={`/api/evaluations/${evaluation.id}/export?format=docx`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
             >
               Export Word
-            </Button>
+            </a>
           </>
         )}
       </div>
