@@ -25,19 +25,19 @@ The default demo is a near-miss **fail**: 11 g error where 10 g is allowed on th
 ```bash
 docker compose up -d
 cp .env.example .env          # fill AUTH_SECRET and DEMO_PASSWORD
-npm install
-npx prisma migrate deploy
-npx prisma db seed
-npm run dev
+pnpm install
+pnpm exec prisma migrate deploy
+pnpm exec prisma db seed
+pnpm dev
 ```
 
 Checks:
 
 ```bash
 python3 engine/check.py       # ALIVE 6/6 held-out correct
-npx vitest run src/engine/r76.test.ts
+pnpm test
 bash scripts/smoke.sh         # needs pdftotext + unzip
-npx tsx scripts/gen-methodology.ts
+pnpm exec tsx scripts/gen-methodology.ts
 ```
 
 Demo logins (mocked, not a live RRSL): `tester@nawimark.local` and `reviewer@nawimark.local`, password from `DEMO_PASSWORD`.

@@ -4,11 +4,17 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PACK_ID, PACK_MARKS } from "@/engine/pack";
+import { PACK_ID, PACK_MARKS, PROCEDURE_LABELS } from "@/engine/pack";
 import { buildShowWorking, MPE_USED_LINE } from "@/lib/reports/explainer";
 import { AttachmentForm } from "./attachments";
 import { ResultMarks } from "./band-toggle";
 import { ReviewForm } from "./review-form";
+
+const DECISION_LABEL = {
+  NONE: "Not yet reviewed",
+  GRANTED: "Granted",
+  REFUSED: "Refused",
+} as const;
 
 export default async function ResultPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -24,36 +30,61 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
     session?.user.role === "TESTER" && session.user.id === evaluation.instrument.createdById;
   if (!isOwnerTester && !isReviewer) redirect("/dashboard");
 
+  const packId = evaluation.packId || PACK_ID;
   const marks = evaluation.procedures.filter((p) => (PACK_MARKS as readonly string[]).includes(p.key));
   const failedMarks = marks.filter((p) => p.status === "MARKED_FAIL");
+  const cannotMarks = marks.filter((p) => p.status === "CANNOT_COMPUTE");
   const canGrant = PACK_MARKS.every((k) => marks.find((p) => p.key === k)?.status === "MARKED_PASS");
-  const showWorking = buildShowWorking(evaluation.procedures);
-  const cannotCompute = marks.some((p) => p.status === "CANNOT_COMPUTE");
+  const showWorking = buildShowWorking(evaluation.procedures, "initial", packId);
+  const cannotCompute = cannotMarks.length > 0;
   const decided = evaluation.reviewDecision !== "NONE";
+  const cannotReason =
+    cannotMarks
+      .map((p) => {
+        const r = p.resultJson;
+        return r && typeof r === "object" && "reason" in r ? String((r as { reason: unknown }).reason) : null;
+      })
+      .find((x) => x) ?? "cannot-compute";
+  const grantBlockedBy = failedMarks[0]
+    ? `${PROCEDURE_LABELS[failedMarks[0].key] ?? failedMarks[0].key} failed`
+    : cannotCompute
+      ? cannotReason
+      : marks.some((p) => p.status === "EMPTY")
+        ? "a numeric pack mark is still empty"
+        : null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="page-head">
+    <div className="flex flex-col gap-6">
+      <header className="page-head flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <Link href="/dashboard" className="text-xs text-muted-foreground hover:text-foreground">
+                &larr; Desk
+              </Link>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
               {evaluation.instrument.manufacturer} {evaluation.instrument.model}
             </h1>
-            <p>
+            <p className="text-xs sm:text-sm text-muted-foreground font-mono">
               Class {evaluation.instrument.class} · Max {evaluation.instrument.maxG} g · e {evaluation.instrument.eG} g
               · n={evaluation.instrument.n ?? "?"}
             </p>
           </div>
           {isOwnerTester && !decided ? (
-            <Link href={`/evaluations/${evaluation.id}/observations`} className="text-sm underline underline-offset-4">
-              Edit observations
+            <Link
+              href={`/evaluations/${evaluation.id}/observations`}
+              className="text-xs sm:text-sm font-semibold text-primary underline underline-offset-4 hover:text-primary/80"
+            >
+              Edit observations &rarr;
             </Link>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <Badge variant="outline">{PACK_ID}</Badge>
-          <span>{MPE_USED_LINE}</span>
-          <Badge>{evaluation.status}</Badge>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Badge variant="outline">{packId}</Badge>
+          <span className="font-mono text-muted-foreground">{MPE_USED_LINE}</span>
+          <Badge variant="secondary">{evaluation.status === "COMPLETED" ? "Completed" : "In process"}</Badge>
           <Badge
             variant={
               evaluation.reviewDecision === "GRANTED"
@@ -63,10 +94,20 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
                   : "secondary"
             }
           >
-            {evaluation.reviewDecision}
+            {DECISION_LABEL[evaluation.reviewDecision]}
           </Badge>
         </div>
       </header>
+
+      {cannotCompute ? (
+        <section className="cannot-card">
+          <h2 className="text-sm font-bold text-destructive mb-1">Cannot compute</h2>
+          <p className="text-xs sm:text-sm font-mono text-destructive mb-1">{cannotReason}</p>
+          <p className="text-xs text-muted-foreground">
+            No PDF or Word until the instrument and lab band are legal and every marked sheet has numbers the engine can read.
+          </p>
+        </section>
+      ) : null}
 
       <ResultMarks
         procedures={evaluation.procedures.map((p) => ({
@@ -76,28 +117,38 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
           resultJson: p.resultJson,
         }))}
         failedKeys={failedMarks.map((p) => p.key)}
+        packId={packId}
+        passCount={marks.filter((p) => p.status === "MARKED_PASS").length}
+        inspectorCount={evaluation.procedures.filter((p) => p.status === "ENTERED_NOT_MARKED").length}
       />
 
       <details className="sheet">
-        <summary>Show every calculation</summary>
-        <div className="sheet-body">
+        <summary>
+          <span>Show every calculation</span>
+          <span className="text-xs text-muted-foreground">▾</span>
+        </summary>
+        <div className="sheet-body divide-y divide-border/60">
           {showWorking.map((row) => (
-            <div key={row.key} className="text-sm">
-              <p className="font-medium">{row.key}</p>
+            <div key={row.key} className="py-2.5 first:pt-0 last:pb-0 text-xs sm:text-sm">
+              <p className="font-bold text-foreground mb-1">{PROCEDURE_LABELS[row.key] ?? row.key}</p>
               {row.computed ? (
                 row.lines.length > 0 ? (
-                  row.lines.map((line, i) => (
-                    <p key={i} className="text-muted-foreground">
-                      {line}
-                    </p>
-                  ))
+                  <div className="flex flex-col gap-0.5 pl-2 font-mono text-xs">
+                    {row.lines.map((line, i) => (
+                      <p key={i} className="text-muted-foreground">
+                        {line}
+                      </p>
+                    ))}
+                  </div>
                 ) : (
-                  <p className="text-muted-foreground">Not computed yet.</p>
+                  <p className="text-muted-foreground text-xs pl-2">{row.note ?? "Not computed yet."}</p>
                 )
               ) : (
-                <p className="text-muted-foreground">{row.note}</p>
+                <p className="text-muted-foreground text-xs pl-2">{row.note}</p>
               )}
-              {row.note && row.computed ? <p className="text-destructive">{row.note}</p> : null}
+              {row.note && row.computed && row.lines.length > 0 ? (
+                <p className="text-destructive text-xs font-mono pl-2 mt-1">{row.note}</p>
+              ) : null}
             </div>
           ))}
         </div>
@@ -105,13 +156,23 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
 
       <div className="flex flex-wrap gap-2">
         {cannotCompute ? (
-          <p className="text-sm text-destructive">No PDF or Word — cannot-compute (illegal instrument or lab out of band).</p>
+          <p className="text-xs text-destructive font-mono">No PDF or Word — {cannotReason}</p>
         ) : (
           <>
-            <Button render={<a href={`/api/evaluations/${evaluation.id}/export?format=pdf`} />} nativeButton={false} variant="outline">
+            <Button
+              render={<a href={`/api/evaluations/${evaluation.id}/export?format=pdf`} />}
+              nativeButton={false}
+              variant="outline"
+              size="sm"
+            >
               Export PDF
             </Button>
-            <Button render={<a href={`/api/evaluations/${evaluation.id}/export?format=docx`} />} nativeButton={false} variant="outline">
+            <Button
+              render={<a href={`/api/evaluations/${evaluation.id}/export?format=docx`} />}
+              nativeButton={false}
+              variant="outline"
+              size="sm"
+            >
               Export Word
             </Button>
           </>
@@ -125,7 +186,12 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
       />
 
       {isReviewer ? (
-        <ReviewForm evaluationId={evaluation.id} canGrant={canGrant} decided={decided} />
+        <ReviewForm
+          evaluationId={evaluation.id}
+          canGrant={canGrant}
+          decided={decided}
+          grantBlockedBy={grantBlockedBy}
+        />
       ) : null}
     </div>
   );

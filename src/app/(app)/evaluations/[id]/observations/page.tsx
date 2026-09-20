@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -20,18 +21,26 @@ export default async function ObservationsPage({ params }: { params: Promise<{ i
   const payload = (key: string) => byKey[key]?.payloadJson as Record<string, unknown> | undefined;
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="page-head">
-        <h1>Observation sheet</h1>
-        <p>
+    <div className="flex flex-col gap-6">
+      <header className="page-head flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Link href={`/evaluations/${id}/result`} className="text-xs text-muted-foreground hover:text-foreground">
+              &larr; Evaluation result
+            </Link>
+          </div>
+        </div>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Observation sheet</h1>
+        <p className="text-xs sm:text-sm font-mono text-muted-foreground">
           {evaluation.instrument.manufacturer} {evaluation.instrument.model} · class {evaluation.instrument.class} · Max{" "}
           {evaluation.instrument.maxG} g · e {evaluation.instrument.eG} g
         </p>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground leading-relaxed bg-muted/40 p-2.5 rounded-2xs border border-border">
           Lab band [{TEMP_MIN}, {TEMP_MAX}] °C, RH [{RH_MIN}, {RH_MAX}] %. Pack marks every numeric section. EMC /
           construction / checklist never get a green PASS from the engine.
         </p>
       </header>
+
       <ObservationsForm
         evaluationId={id}
         locked={evaluation.reviewDecision !== "NONE"}

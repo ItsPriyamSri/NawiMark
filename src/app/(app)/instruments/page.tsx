@@ -24,26 +24,38 @@ export default async function InstrumentsPage({
   });
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Instruments</h1>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Instruments</h1>
+          <p className="text-xs text-muted-foreground">Registered non-automatic weighing instruments (NAWI)</p>
+        </div>
         <Button render={<Link href="/instruments/new" />} nativeButton={false}>
           New instrument
         </Button>
       </div>
-      <form className="flex gap-2">
-        <input
-          type="search"
-          name="q"
-          defaultValue={q ?? ""}
-          placeholder="Search manufacturer or model…"
-          className="h-8 w-64 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-        />
-        <Button type="submit" variant="outline">
+
+      <form className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-xs">
+          <input
+            type="search"
+            name="q"
+            defaultValue={q ?? ""}
+            placeholder="Search manufacturer or model…"
+            className="h-8 w-full rounded-xs border border-input bg-card/60 px-3 py-1 text-sm outline-none transition-all duration-150 placeholder:text-muted-foreground/70 hover:border-[#aab5a4] focus-visible:border-primary focus-visible:bg-card focus-visible:ring-2 focus-visible:ring-primary/20"
+          />
+        </div>
+        <Button type="submit" variant="outline" size="sm">
           Search
         </Button>
+        {q ? (
+          <Link href="/instruments" className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4 ml-1">
+            Clear
+          </Link>
+        ) : null}
       </form>
-      <Card>
+
+      <Card className="rounded-xs border border-border">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -51,29 +63,38 @@ export default async function InstrumentsPage({
                 <TableHead>Manufacturer</TableHead>
                 <TableHead>Model</TableHead>
                 <TableHead>Class</TableHead>
-                <TableHead>Max</TableHead>
-                <TableHead>e</TableHead>
-                <TableHead>Evaluations</TableHead>
+                <TableHead className="text-right">Max</TableHead>
+                <TableHead className="text-right">e</TableHead>
+                <TableHead className="text-right pr-4">Evaluations</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {instruments.map((i) => (
-                <TableRow key={i.id}>
-                  <TableCell>{i.manufacturer}</TableCell>
+                <TableRow key={i.id} className="group">
+                  <TableCell className="font-bold text-foreground">{i.manufacturer}</TableCell>
                   <TableCell>
-                    <Link href={`/instruments/${i.id}`} className="underline underline-offset-4">
+                    <Link
+                      href={`/instruments/${i.id}`}
+                      className="font-mono text-xs font-semibold text-primary underline underline-offset-4 decoration-border group-hover:decoration-primary transition-colors"
+                    >
                       {i.model}
                     </Link>
                   </TableCell>
-                  <TableCell>{i.class}</TableCell>
-                  <TableCell>{i.maxG} g</TableCell>
-                  <TableCell>{i.eG} g</TableCell>
-                  <TableCell>{i._count.evaluations}</TableCell>
+                  <TableCell>
+                    <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded-2xs border border-border">
+                      {i.class}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs tabular-nums">{i.maxG} g</TableCell>
+                  <TableCell className="text-right font-mono text-xs tabular-nums">{i.eG} g</TableCell>
+                  <TableCell className="text-right pr-4 font-mono text-xs tabular-nums text-muted-foreground">
+                    {i._count.evaluations}
+                  </TableCell>
                 </TableRow>
               ))}
               {instruments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                     No instruments{q ? ` matching "${q}"` : ""}.
                   </TableCell>
                 </TableRow>

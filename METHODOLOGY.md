@@ -1,7 +1,8 @@
 # Calculation methodology
 
-Generated from `R-76 pack v1` (`src/engine/pack.ts`, `src/engine/r76.ts`) — not hand-written.
-Regenerate: `npx tsx scripts/gen-methodology.ts`.
+Generated from `R-76 pack v1` (`src/engine/pack.ts`, `src/engine/r76.ts`).
+Table 6 and the procedure list come from those files. Clause strings are the hand-written map in `src/lib/reports/explainer.ts`.
+Regenerate: `pnpm exec tsx scripts/gen-methodology.ts`.
 
 ## MPE — OIML R 76-1 Table 6, initial / type evaluation
 
@@ -58,5 +59,5 @@ One Next.js App Router monolith. Postgres holds instruments, evaluations, proced
 
 ## Deployment
 
-Single host. Env vars in `.env` (see `.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` (production only), `DEMO_PASSWORD`. `npx prisma migrate deploy` then `npx prisma db seed` on first boot.
+Single host. Env vars in `.env` (see `.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` (production only), `DEMO_PASSWORD`. `pnpm exec prisma migrate deploy` then `pnpm exec prisma db seed` on first boot.
 

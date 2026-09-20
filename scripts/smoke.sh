@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Wave 1 definition of done. Run after `npx prisma db seed` on a fresh DB.
+# Submission smoke: Fail + pack v1 + explainer on PDF and Word. Run after seed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const evaluation = await db.evaluation.findUnique({
     where: { id },
-    include: { instrument: true, procedures: true },
+    include: { instrument: true, procedures: true, attachments: true },
   });
   if (!evaluation) return NextResponse.json({ error: "not-found" }, { status: 404 });
 
@@ -21,8 +21,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!isOwnerTester && !isReviewer) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const marks = evaluation.procedures.filter((p) => (PACK_MARKS as readonly string[]).includes(p.key));
-  if (marks.some((p) => p.status === "CANNOT_COMPUTE")) {
-    return NextResponse.json({ error: "cannot-compute: no report for an illegal instrument or out-of-band lab conditions" }, { status: 400 });
+  const blocked = marks.find((p) => p.status === "CANNOT_COMPUTE");
+  if (blocked) {
+    const r = blocked.resultJson;
+    const reason =
+      r && typeof r === "object" && "reason" in r
+        ? String((r as { reason: unknown }).reason)
+        : "cannot-compute";
+    return NextResponse.json({ error: reason }, { status: 400 });
   }
 
   const format = req.nextUrl.searchParams.get("format");

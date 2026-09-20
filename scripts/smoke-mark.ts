@@ -1,5 +1,5 @@
 /**
- * Wave 1 smoke: mark the seeded near-miss evaluation and export both
+ * Submission smoke: mark the seeded near-miss evaluation and export both
  * reports to disk, so scripts/smoke.sh can grep them for the locked lines.
  */
 import { writeFileSync, mkdirSync } from "node:fs";

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run src/engine/r76.test.ts"
+    "test": "vitest run src/engine/r76.test.ts src/lib/reports/explainer.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

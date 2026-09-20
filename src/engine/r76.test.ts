@@ -1,4 +1,5 @@
 import { Decimal } from "decimal.js";
+import { ECC_NEAR_MISS, ECC_PASS, REPEAT_PASS, WEIGHING_ROWS, extraNumericPayloads } from "../lib/demo-payloads";
 import {
   creepResult,
   discriminationResult,
@@ -7,8 +8,13 @@ import {
   mpeInitial,
   mpeInService,
   repeatabilityResult,
+  spanStabilityResult,
+  stabilityResult,
+  tempNoLoadResult,
   tiltResult,
   validateInstrument,
+  weighingPerformanceResult,
+  zeroReturnResult,
 } from "./r76";
 
 const E = new Decimal(10);
@@ -96,4 +102,111 @@ test("tilt no-load 2e and loaded MPE", () => {
   expect(pass.passed && pass.noLoadOk && pass.loadedOk).toBe(true);
   const fail = tiltResult(new Decimal(0), new Decimal(30), new Decimal(15000), new Decimal(15008), CLASS, E);
   expect(fail.noLoadOk).toBe(false);
+});
+
+test("weighing performance pass and fail", () => {
+  const pass = weighingPerformanceResult(
+    [
+      { load: new Decimal(0), indicated: new Decimal(0), direction: "up" },
+      { load: new Decimal(30000), indicated: new Decimal(30008), direction: "up" },
+    ],
+    CLASS,
+    E,
+  );
+  expect(pass.passed).toBe(true);
+  const fail = weighingPerformanceResult(
+    [
+      { load: new Decimal(0), indicated: new Decimal(0), direction: "up" },
+      { load: new Decimal(30000), indicated: new Decimal(30020), direction: "up" },
+    ],
+    CLASS,
+    E,
+  );
+  expect(fail.passed).toBe(false);
+});
+
+test("zero return and stability vs e", () => {
+  expect(zeroReturnResult(new Decimal(5), E).passed).toBe(true);
+  expect(zeroReturnResult(new Decimal(11), E).passed).toBe(false);
+  expect(stabilityResult(new Decimal(10000), new Decimal(10008), E).passed).toBe(true);
+  expect(stabilityResult(new Decimal(10000), new Decimal(10020), E).passed).toBe(false);
+});
+
+test("seeded fixtures match Table 6 initial on the e-step", () => {
+  const weigh = weighingPerformanceResult(
+    WEIGHING_ROWS.map((r) => ({ load: new Decimal(r.load), indicated: new Decimal(r.indicated), direction: r.direction })),
+    CLASS,
+    E,
+  );
+  expect(weigh.passed).toBe(true);
+
+  const repeat = repeatabilityResult(
+    new Decimal(REPEAT_PASS.trueLoad),
+    REPEAT_PASS.indications.map((n) => new Decimal(n)),
+    CLASS,
+    E,
+  );
+  expect(repeat.passed).toBe(true);
+
+  const fail = eccentricityResult(
+    new Decimal(ECC_NEAR_MISS.trueLoad),
+    Object.fromEntries(Object.entries(ECC_NEAR_MISS.positions).map(([k, v]) => [k, new Decimal(v)])),
+    CLASS,
+    E,
+  );
+  expect(fail.errors.C.abs().eq(11) && !fail.passed).toBe(true);
+
+  const pass = eccentricityResult(
+    new Decimal(ECC_PASS.trueLoad),
+    Object.fromEntries(Object.entries(ECC_PASS.positions).map(([k, v]) => [k, new Decimal(v)])),
+    CLASS,
+    E,
+  );
+  expect(pass.passed).toBe(true);
+
+  const extra = extraNumericPayloads();
+  expect(
+    discriminationResult(
+      new Decimal(extra.DISCRIMINATION.indicatedBefore),
+      new Decimal(extra.DISCRIMINATION.indicatedAfter),
+      new Decimal(extra.DISCRIMINATION.extraLoad),
+      E,
+    ).passed,
+  ).toBe(true);
+  expect(zeroReturnResult(new Decimal(extra.ZERO_RETURN.residual), E).passed).toBe(true);
+  expect(
+    creepResult(
+      new Decimal(extra.CREEP.load),
+      new Decimal(extra.CREEP.i0),
+      new Decimal(extra.CREEP.i15),
+      new Decimal(extra.CREEP.i30),
+      CLASS,
+      E,
+    ).passed,
+  ).toBe(true);
+});
+
+test("temp no-load and span stability pass/fail", () => {
+  const tPass = tempNoLoadResult(
+    [
+      { tempC: new Decimal(20), zero: new Decimal(0) },
+      { tempC: new Decimal(25), zero: new Decimal(5) },
+    ],
+    CLASS,
+    E,
+  );
+  expect(tPass.passed).toBe(true);
+  const tFail = tempNoLoadResult(
+    [
+      { tempC: new Decimal(20), zero: new Decimal(0) },
+      { tempC: new Decimal(25), zero: new Decimal(20) },
+    ],
+    CLASS,
+    E,
+  );
+  expect(tFail.passed).toBe(false);
+  const sPass = spanStabilityResult([new Decimal(30000), new Decimal(30008)], MAX, E);
+  expect(sPass.passed).toBe(true);
+  const sFail = spanStabilityResult([new Decimal(30000), new Decimal(30020)], MAX, E);
+  expect(sFail.passed).toBe(false);
 });

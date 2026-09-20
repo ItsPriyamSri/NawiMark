@@ -29,6 +29,29 @@ export type PackMark = (typeof PACK_MARKS)[number];
 /** Eyes-only. A green tick here is how this PS dies. */
 export const NEVER_MARK = ["EMC", "CONSTRUCTION", "CHECKLIST"] as const;
 
+export const PROCEDURE_LABELS: Record<string, string> = {
+  WEIGHING: "Weighing performance",
+  ECCENTRICITY: "Eccentricity (4-corner)",
+  REPEATABILITY: "Repeatability",
+  TARE: "Tare weighing",
+  DISCRIMINATION: "Discrimination (digital)",
+  SENSITIVITY: "Sensitivity (analogue)",
+  ZERO_RETURN: "Zero return",
+  CREEP: "Creep",
+  STABILITY: "Stability of equilibrium",
+  TILT: "Tilt",
+  WARMUP: "Warm-up",
+  VOLTAGE: "Voltage variations",
+  TEMP_NOLOAD: "Temperature effect on no-load",
+  DAMP_HEAT: "Damp heat",
+  SPAN_STABILITY: "Span stability",
+  ENDURANCE: "Endurance",
+  ROLLING_ECC: "Rolling-load eccentricity",
+  EMC: "Electrical disturbances (EMC)",
+  CONSTRUCTION: "Construction examination",
+  CHECKLIST: "Software checklist",
+};
+
 export const TEMP_MIN = -10;
 export const TEMP_MAX = 40;
 export const RH_MIN = 0;

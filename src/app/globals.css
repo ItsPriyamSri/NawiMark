@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -67,12 +67,13 @@
   --border: #c5cdc0;
   --input: #c5cdc0;
   --ring: #16324f;
+  --radius: 0.375rem;
+
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -119,16 +120,25 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
-    background-image: linear-gradient(#d7ddd4 1px, transparent 1px);
-    background-size: 100% 28px;
-    background-position: 0 12px;
+    background-color: var(--background);
+    background-image:
+      linear-gradient(#d7ddd4 1px, transparent 1px),
+      radial-gradient(1200px 480px at 12% -10%, #e8ece4 0%, transparent 55%);
+    background-size: 100% 28px, auto;
+    background-position: 0 12px, 0 0;
+    font-feature-settings: "tnum" 1, "cv01" 1;
+    -webkit-font-smoothing: antialiased;
   }
   html {
     @apply font-sans;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }
 
@@ -136,35 +146,120 @@
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  color: #16324f;
 }
 .page-head p {
   color: var(--muted-foreground);
   font-size: 0.95rem;
 }
 
+/* Desk header bar */
+.desk-bar {
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 #fff inset, 0 4px 16px -12px rgba(22, 50, 79, 0.25);
+  background-color: rgba(248, 249, 246, 0.95);
+  backdrop-filter: blur(8px) saturate(1.1);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.nav-ink {
+  position: relative;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.nav-ink::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 1.5px;
+  background: #16324f;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.nav-ink:hover::after,
+.nav-ink:focus-visible::after {
+  transform: scaleX(1);
+}
+
+/* Content arrival settle */
+.desk-main > * {
+  animation: ink-settle 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.login-sheet {
+  animation: ink-settle 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  box-shadow: 0 1px 0 #fff inset, 0 18px 40px -28px rgba(22, 50, 79, 0.35);
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+/* Sheets (bench ledger sheets) */
 .sheet {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: 4px;
+  box-shadow: 0 1px 0 #ffffff inset, 0 2px 6px -3px rgba(22, 50, 79, 0.08);
+  transition: box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1), border-color 200ms;
+}
+.sheet:hover {
+  border-color: #a6b5a0;
+  box-shadow: 0 1px 0 #ffffff inset, 0 6px 18px -10px rgba(22, 50, 79, 0.15);
+}
+.sheet:focus-within {
+  border-color: #8c9d86;
 }
 .sheet > summary,
 .sheet h2 {
-  cursor: pointer;
-  list-style: none;
   padding: 0.75rem 1rem;
   font-weight: 700;
   font-size: 0.9rem;
   border-bottom: 1px solid var(--border);
+  color: #16324f;
+  letter-spacing: -0.01em;
 }
+
+.sheet > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sheet > summary::-webkit-details-marker {
+  display: none;
+}
+.sheet > summary:hover {
+  background-color: rgba(228, 232, 226, 0.4);
+}
+.sheet > summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
 .sheet-body {
   padding: 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 }
+details.sheet:not([open]) .sheet-body {
+  display: none;
+}
+details.sheet[open] .sheet-body {
+  animation: sheet-open 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
 .sheet-note {
-  font-size: 0.8rem;
+  font-size: 0.825rem;
   color: var(--muted-foreground);
+  line-height: 1.4;
 }
 .row {
   display: flex;
@@ -172,14 +267,22 @@
   gap: 0.75rem;
 }
 
+/* Platter & Platform graphics */
 .corner-pad {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  grid-template-columns: repeat(2, minmax(6.5rem, 1fr));
   gap: 0.75rem;
-  max-width: 22rem;
-  padding: 1rem;
-  border: 1px dashed var(--border);
-  background: #eef1ea;
+  max-width: 20rem;
+  padding: 1.25rem;
+  border: 1.5px dashed #aab5a4;
+  border-radius: 4px;
+  background: #edf1ea;
+  position: relative;
+  box-shadow: 0 1px 0 #fff inset;
+}
+.corner-pad-6 {
+  grid-template-columns: repeat(3, minmax(5.5rem, 1fr));
+  max-width: 24rem;
 }
 .corner {
   display: flex;
@@ -187,31 +290,221 @@
   gap: 0.25rem;
   font-size: 0.75rem;
   font-weight: 700;
+  color: #16324f;
 }
 
-.fail-card {
-  border: 2px solid var(--destructive);
-  background: #fdf2f0;
-  padding: 1rem 1.25rem;
+/* ========================================================= */
+/* FOCAL MOMENT: THE FAIL / 2x TOGGLE CARD (THE PRODUCT USP) */
+/* ========================================================= */
+
+.fail-card,
+.pass-card {
+  border-radius: 4px;
+  padding: 1.15rem 1.35rem;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.85rem;
+  position: relative;
+  overflow: hidden;
+  transition:
+    background-color 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Stamp edge indicator bar */
+.fail-card::before,
+.pass-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+  transition: background-color 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Initial Type-Evaluation Fail Stamp */
+.fail-card {
+  border: 1.5px solid var(--destructive);
+  background: #fdf3f2;
+  box-shadow: 0 1px 0 #fff inset, 0 10px 28px -18px rgba(180, 35, 24, 0.4);
+}
+.fail-card::before {
+  background-color: var(--destructive);
 }
 .fail-card h2 {
   color: var(--destructive);
   font-weight: 700;
+  letter-spacing: -0.01em;
+  font-size: 1.05rem;
 }
+
+/* In-Service 2x Comparison Band (Contrast Stamp) */
 .fail-card-contrast {
   border-color: #1f6b4a;
-  background: #eef6f1;
+  background: #f0f7f3;
+  box-shadow: 0 1px 0 #fff inset, 0 10px 28px -18px rgba(31, 107, 74, 0.35);
+}
+.fail-card-contrast::before {
+  background-color: #1f6b4a;
 }
 .fail-card-contrast h2 {
   color: #1f6b4a;
 }
 
+/* Stamp animation trigger when band changes */
+.stamp-anim {
+  animation: stamp-impression 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes stamp-impression {
+  0% {
+    transform: scale(0.992) translateY(-1px);
+    opacity: 0.92;
+  }
+  50% {
+    transform: scale(1.004) translateY(1px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Stored Pass Card */
+.pass-card {
+  border: 1.5px solid #1f6b4a;
+  background: #f0f7f3;
+  box-shadow: 0 1px 0 #fff inset, 0 10px 28px -18px rgba(31, 107, 74, 0.35);
+}
+.pass-card::before {
+  background-color: #1f6b4a;
+}
+.pass-card h2 {
+  color: #1f6b4a;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-size: 1.05rem;
+}
+
+/* Cannot-Compute Card */
+.cannot-card {
+  border: 1.5px solid #b42318;
+  background: #fdf3f2;
+  border-radius: 4px;
+  padding: 1.15rem 1.35rem;
+  box-shadow: 0 1px 0 #fff inset, 0 10px 28px -18px rgba(180, 35, 24, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+.cannot-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+  background-color: #b42318;
+}
+
+/* Toggle Switch Control */
 .band-toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.65rem;
   font-size: 0.9rem;
+  font-weight: 500;
+  color: #16324f;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.4rem 0.65rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: #edf1ea;
+  box-shadow: 0 1px 0 #fff inset;
+  transition: background-color 150ms, border-color 150ms, box-shadow 150ms;
+}
+.band-toggle:hover {
+  background-color: #e4e9df;
+  border-color: #aab5a4;
+  box-shadow: 0 1px 0 #fff inset, 0 2px 6px -2px rgba(22, 50, 79, 0.1);
+}
+.band-toggle input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: #16324f;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.band-toggle:hover input[type="checkbox"] {
+  transform: scale(1.08);
+}
+.band-toggle:active input[type="checkbox"] {
+  transform: scale(0.95);
+}
+
+/* Stat Tiles */
+.stat-tile {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 180ms, border-color 180ms;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 0 #fff inset, 0 2px 6px -3px rgba(22, 50, 79, 0.08);
+}
+.stat-tile:hover {
+  transform: translateY(-2px);
+  border-color: #9aa894;
+  box-shadow: 0 1px 0 #fff inset, 0 12px 22px -16px rgba(22, 50, 79, 0.25);
+}
+.stat-tile[data-active="true"] {
+  border-color: #16324f;
+  box-shadow: 0 1px 0 #fff inset, 0 0 0 1.5px #16324f;
+  background: #f4f6f2;
+}
+
+/* Keyframes */
+@keyframes ink-settle {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
+
+@keyframes sheet-open {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 8% 0);
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: none;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .desk-main > *,
+  .login-sheet,
+  details.sheet[open] .sheet-body,
+  .fail-card,
+  .pass-card,
+  .stat-tile,
+  .nav-ink::after,
+  .band-toggle input,
+  .stamp-anim {
+    animation: none !important;
+    transition: none !important;
+    filter: none !important;
+    transform: none !important;
+    clip-path: none !important;
+  }
 }

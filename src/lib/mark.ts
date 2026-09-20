@@ -76,6 +76,7 @@ export async function markEvaluation(evaluationId: string) {
   const blockedReason = instrumentReason ?? envReason;
 
   await db.$transaction(async (tx) => {
+    await tx.evaluation.update({ where: { id: evaluationId }, data: { packId: PACK_ID } });
     for (const proc of procedures) {
       if (!(PACK_MARKS as readonly string[]).includes(proc.key)) continue;
 

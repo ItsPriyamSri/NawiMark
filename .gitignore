@@ -17,6 +17,8 @@ __pycache__/
 *.tsbuildinfo
 next-env.d.ts
 .impeccable/
+.claude/
+.playwright-mcp/
 
 # Local agent / war-room notes — not part of the public product tree
 docs/

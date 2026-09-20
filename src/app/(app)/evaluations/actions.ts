@@ -9,6 +9,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { markEvaluation } from "@/lib/mark";
 import { NEVER_MARK, PACK_ID, PACK_MARKS } from "@/engine/pack";
+import { WEIGHING_ROWS } from "@/lib/demo-payloads";
 
 async function requireTesterOwner(evaluationId: string) {
   const session = await auth();
@@ -30,7 +31,7 @@ function field(formData: FormData, name: string) {
   return String(formData.get(name) ?? "").trim();
 }
 
-function weighRows(formData: FormData, prefix: string, count = 6) {
+function weighRows(formData: FormData, prefix: string, count = WEIGHING_ROWS.length) {
   return Array.from({ length: count }, (_, i) => ({
     load: field(formData, `${prefix}.${i}.load`),
     indicated: field(formData, `${prefix}.${i}.indicated`),
@@ -112,7 +113,7 @@ export async function saveObservationsAction(
       indicated: [0, 1].map((i) => field(formData, `warmup.ind.${i}`)).filter(Boolean),
     }),
     VOLTAGE: objectIf({
-      rows: [0, 1, 2]
+      rows: [0, 1, 2, 3, 4, 5]
         .map((i) => ({
           voltage: field(formData, `volt.${i}.voltage`),
           load: field(formData, `volt.${i}.load`),
@@ -163,7 +164,7 @@ export async function saveObservationsAction(
       data: {
         payloadJson: objectIf({
           trueLoad: field(formData, "repeat.trueLoad"),
-          indications: [0, 1, 2, 3, 4].map((i) => field(formData, `repeat.${i}`)).filter(Boolean),
+          indications: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => field(formData, `repeat.${i}`)).filter(Boolean),
         }),
       },
     });
@@ -208,12 +209,14 @@ export type ReviewState = { error: string | null };
 
 export async function reviewDecisionAction(
   evaluationId: string,
-  decision: "GRANTED" | "REFUSED",
   _prev: ReviewState,
   formData: FormData,
 ): Promise<ReviewState> {
   const session = await auth();
   if (session?.user.role !== "REVIEWER") return { error: "Only a reviewer can decide." };
+
+  const decision = field(formData, "decision");
+  if (decision !== "GRANTED" && decision !== "REFUSED") return { error: "Pick Grant or Refuse." };
 
   if (decision === "GRANTED") {
     const procedures = await db.procedure.findMany({ where: { evaluationId } });
@@ -227,8 +230,8 @@ export async function reviewDecisionAction(
 
   const reviewNote = field(formData, "reviewNote") || null;
 
-  await db.evaluation.update({
-    where: { id: evaluationId },
+  const updated = await db.evaluation.updateMany({
+    where: { id: evaluationId, reviewDecision: "NONE" },
     data: {
       reviewDecision: decision,
       reviewNote,
@@ -237,6 +240,7 @@ export async function reviewDecisionAction(
       status: "COMPLETED",
     },
   });
+  if (updated.count === 0) return { error: "Already decided." };
 
   revalidatePath(`/evaluations/${evaluationId}/result`);
   redirect(`/evaluations/${evaluationId}/result`);

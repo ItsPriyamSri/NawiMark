@@ -82,7 +82,7 @@ async function main() {
     console.log(`illegal n correctly rejected by engine: ${err.message}`);
   }
 
-  await db.instrument.create({
+  const junk = await db.instrument.create({
     data: {
       manufacturer: "JunkScale",
       model: "ILLEGAL-n",
@@ -116,11 +116,29 @@ async function main() {
     },
   });
 
+  const junkEval = await db.evaluation.create({
+    data: {
+      instrumentId: junk.id,
+      packId: PACK_ID,
+      tempC: "20",
+      rhPct: "50",
+      observer: "Demo",
+      procedures: {
+        create: Object.values(ProcedureKey).map((key) => ({
+          key,
+          status: "EMPTY" as const,
+          payloadJson: {},
+        })),
+      },
+    },
+  });
+
   const { markEvaluation } = await import("../src/lib/mark");
   await markEvaluation(failEval.id);
   await markEvaluation(passEval.id);
+  await markEvaluation(junkEval.id);
 
-  console.log(`seeded: tester/reviewer, NW-30 + illegal n, fail ${failEval.id}, pass ${passEval.id}`);
+  console.log(`seeded: tester/reviewer, NW-30 + illegal n, fail ${failEval.id}, pass ${passEval.id}, junk ${junkEval.id}`);
 }
 
 main()

@@ -4,7 +4,7 @@
  */
 import { Decimal } from "decimal.js";
 import type { Evaluation, Instrument, Procedure, ProcedureKey, ProcedureStatus } from "@prisma/client";
-import { MPE_BAND, MPE_BAND_INSPECTION, NEVER_MARK, PACK_ID, PACK_MARKS } from "@/engine/pack";
+import { MPE_BAND, MPE_BAND_INSPECTION, NEVER_MARK, PACK_ID, PACK_MARKS, PROCEDURE_LABELS } from "@/engine/pack";
 
 export const CLAUSES: Partial<Record<ProcedureKey, string>> = {
   WEIGHING: "OIML R 76-1 3.5 (weighing performance)",
@@ -65,35 +65,64 @@ function bandLines(view: MpeView, mpe: Decimal, errorAbs: Decimal): string[] {
   return lines;
 }
 
+function packLine(packId: string) {
+  return `Pack: ${packId}.`;
+}
+
+function observedError(result: Record<string, unknown>): Decimal | null {
+  for (const key of ["error", "d30", "delta", "spread", "change", "residual", "noLoadDelta"] as const) {
+    const v = result[key];
+    if (typeof v === "string" || typeof v === "number") return new Decimal(v).abs();
+  }
+  return null;
+}
+
 /** Locked wording: "Corner C: 11 g error. Allowed at this load: 10 g." */
-export function explainEccentricity(result: EccentricityResult, view: MpeView = "initial"): string[] {
+export function explainEccentricity(
+  result: EccentricityResult,
+  view: MpeView = "initial",
+  packId = PACK_ID,
+): string[] {
+  if (!result.errors || !result.mpe) return [];
   const entries = Object.entries(result.errors).map(([pos, err]) => ({
     pos,
     err: new Decimal(err),
   }));
+  if (entries.length === 0) return [];
   const worst = entries.reduce((a, b) => (b.err.abs().gt(a.err.abs()) ? b : a));
   const mpe = new Decimal(result.mpe);
   const allowed = view === "in-service" ? mpe.mul(2) : mpe;
   const lines = [
     `Corner ${worst.pos}: ${worst.err.abs().toString()} g error. Allowed at this load: ${allowed.toString()} g.`,
     ...bandLines(view, mpe, worst.err.abs()),
-    `Clause: ${CLAUSES.ECCENTRICITY}. Pack: ${PACK_ID}.`,
+    `Clause: ${CLAUSES.ECCENTRICITY}. ${packLine(packId)}`,
   ];
   return lines;
 }
 
-export function explainRepeatability(result: RepeatabilityResult, view: MpeView = "initial"): string[] {
+export function explainRepeatability(
+  result: RepeatabilityResult,
+  view: MpeView = "initial",
+  packId = PACK_ID,
+): string[] {
+  if (result.mpe == null || result.spread == null) return [];
   const mpe = new Decimal(result.mpe);
   const spread = new Decimal(result.spread);
   const allowed = view === "in-service" ? mpe.mul(2) : mpe;
   return [
     `Spread across readings: ${spread.toString()} g. Allowed: ${allowed.toString()} g.`,
     ...bandLines(view, mpe, spread),
-    `Clause: ${CLAUSES.REPEATABILITY}. Pack: ${PACK_ID}.`,
+    `Clause: ${CLAUSES.REPEATABILITY}. ${packLine(packId)}`,
   ];
 }
 
-export function explainWeighing(result: WeighingResult, view: MpeView = "initial", clause = CLAUSES.WEIGHING): string[] {
+export function explainWeighing(
+  result: WeighingResult,
+  view: MpeView = "initial",
+  clause = CLAUSES.WEIGHING,
+  packId = PACK_ID,
+): string[] {
+  if (!result.rows?.length) return [];
   const worst = result.rows.reduce((a, b) =>
     new Decimal(b.error).abs().gt(new Decimal(a.error).abs()) ? b : a,
   );
@@ -102,35 +131,43 @@ export function explainWeighing(result: WeighingResult, view: MpeView = "initial
   return [
     `Load ${worst.load} g: ${new Decimal(worst.error).abs().toString()} g error. Allowed: ${allowed.toString()} g.`,
     ...bandLines(view, mpe, new Decimal(worst.error).abs()),
-    `Clause: ${clause}. Pack: ${PACK_ID}.`,
+    `Clause: ${clause}. ${packLine(packId)}`,
   ];
 }
 
-function genericLines(key: ProcedureKey, result: Record<string, unknown>, view: MpeView): string[] {
+function genericLines(key: ProcedureKey, result: Record<string, unknown>, view: MpeView, packId: string): string[] {
   const passed = result.passed === true;
   const mpe = typeof result.mpe === "string" ? new Decimal(result.mpe) : null;
-  const lines = [`${key}: ${passed ? "PASS" : "FAIL"} on stored type-eval mark.`];
-  if (mpe) lines.push(...bandLines(view, mpe, new Decimal(0)));
-  if (CLAUSES[key]) lines.push(`Clause: ${CLAUSES[key]}. Pack: ${PACK_ID}.`);
+  const errorAbs = observedError(result);
+  const lines = [`${PROCEDURE_LABELS[key] ?? key}: ${passed ? "PASS" : "FAIL"} on stored type-eval mark.`];
+  if (mpe && errorAbs) lines.push(...bandLines(view, mpe, errorAbs));
+  else if (view === "initial") lines.push("Band used: type-evaluation / initial, not the later shop 2×.");
+  if (CLAUSES[key]) lines.push(`Clause: ${CLAUSES[key]}. ${packLine(packId)}`);
   return lines;
 }
 
-export function explainProcedure(key: ProcedureKey, resultJson: unknown, view: MpeView = "initial"): string[] | null {
+export function explainProcedure(
+  key: ProcedureKey,
+  resultJson: unknown,
+  view: MpeView = "initial",
+  packId = PACK_ID,
+): string[] | null {
   if (!resultJson || typeof resultJson !== "object") return null;
   const r = resultJson as Record<string, unknown>;
+  if (typeof r.reason === "string" && r.passed == null) return null;
   switch (key) {
     case "ECCENTRICITY":
     case "ROLLING_ECC":
-      return explainEccentricity(r as unknown as EccentricityResult, view);
+      return explainEccentricity(r as unknown as EccentricityResult, view, packId);
     case "REPEATABILITY":
-      return explainRepeatability(r as unknown as RepeatabilityResult, view);
+      return explainRepeatability(r as unknown as RepeatabilityResult, view, packId);
     case "WEIGHING":
     case "TARE":
     case "DAMP_HEAT":
-      return explainWeighing(r as unknown as WeighingResult, view, CLAUSES[key]);
+      return explainWeighing(r as unknown as WeighingResult, view, CLAUSES[key], packId);
     default:
-      if ("rows" in r) return explainWeighing(r as unknown as WeighingResult, view, CLAUSES[key]);
-      return genericLines(key, r, view);
+      if ("rows" in r) return explainWeighing(r as unknown as WeighingResult, view, CLAUSES[key], packId);
+      return genericLines(key, r, view, packId);
   }
 }
 
@@ -142,7 +179,11 @@ export interface ShowWorkingRow {
   note: string | null;
 }
 
-export function buildShowWorking(procedures: Procedure[], view: MpeView = "initial"): ShowWorkingRow[] {
+export function buildShowWorking(
+  procedures: Procedure[],
+  view: MpeView = "initial",
+  packId = PACK_ID,
+): ShowWorkingRow[] {
   return procedures.map((p) => {
     const computed = (PACK_MARKS as readonly string[]).includes(p.key);
     if (!computed) {
@@ -160,13 +201,22 @@ export function buildShowWorking(procedures: Procedure[], view: MpeView = "initi
               : "Entered, not marked in this pack.",
       };
     }
-    const lines = explainProcedure(p.key, p.resultJson, view) ?? [];
+    if (p.status === "CANNOT_COMPUTE") {
+      return {
+        key: p.key,
+        status: p.status,
+        computed: true,
+        lines: [],
+        note: cannotComputeNote(p.resultJson),
+      };
+    }
+    const lines = explainProcedure(p.key, p.resultJson, view, packId) ?? [];
     return {
       key: p.key,
       status: p.status,
       computed: true,
       lines,
-      note: p.status === "CANNOT_COMPUTE" ? cannotComputeNote(p.resultJson) : null,
+      note: null,
     };
   });
 }
@@ -189,8 +239,13 @@ const STATUS_LABEL: Record<ProcedureStatus, string> = {
 };
 
 export function buildReportLines(
-  evaluation: Evaluation & { instrument: Instrument; procedures: Procedure[] },
+  evaluation: Evaluation & {
+    instrument: Instrument;
+    procedures: Procedure[];
+    attachments?: Array<{ filename: string }>;
+  },
 ): string[] {
+  const packId = evaluation.packId || PACK_ID;
   const lines: string[] = [];
   lines.push("NawiMark");
   lines.push("SIH26035 — OIML R-76 type-evaluation report");
@@ -198,22 +253,26 @@ export function buildReportLines(
   lines.push(
     `Instrument: ${evaluation.instrument.manufacturer} ${evaluation.instrument.model} — Class ${evaluation.instrument.class}, Max ${evaluation.instrument.maxG} g, e ${evaluation.instrument.eG} g, n=${evaluation.instrument.n ?? "?"}`,
   );
-  lines.push(`Pack: ${PACK_ID}`);
+  lines.push(`Pack: ${packId}`);
   lines.push(MPE_USED_LINE);
   lines.push(
     `Lab: temperature ${evaluation.tempC ?? "?"} °C, RH ${evaluation.rhPct ?? "?"} %, observer ${evaluation.observer ?? "?"}`,
   );
-  lines.push("");
-  lines.push("Procedures:");
-  for (const row of buildShowWorking(evaluation.procedures)) {
-    lines.push(`  ${row.key}: ${STATUS_LABEL[row.status]}`);
-    for (const line of row.lines) lines.push(`    ${line}`);
-    if (row.note && row.computed) lines.push(`    ${row.note}`);
-    if (row.note && !row.computed) lines.push(`    ${row.note}`);
+  if (evaluation.attachments?.length) {
+    lines.push(`Attachments: ${evaluation.attachments.map((a) => a.filename).join(", ")}`);
   }
   lines.push("");
+  lines.push("Procedures:");
+  for (const row of buildShowWorking(evaluation.procedures, "initial", packId)) {
+    const name = PROCEDURE_LABELS[row.key] ?? row.key;
+    lines.push(`  ${name}: ${STATUS_LABEL[row.status]}`);
+    for (const line of row.lines) lines.push(`    ${line}`);
+    if (row.note) lines.push(`    ${row.note}`);
+  }
+  lines.push("");
+  const when = evaluation.reviewedAt ? ` at ${evaluation.reviewedAt.toISOString()}` : "";
   lines.push(
-    `Review: ${evaluation.reviewDecision}${evaluation.reviewNote ? ` — ${evaluation.reviewNote}` : ""}`,
+    `Review: ${evaluation.reviewDecision}${when}${evaluation.reviewNote ? ` — ${evaluation.reviewNote}` : ""}`,
   );
   return lines;
 }

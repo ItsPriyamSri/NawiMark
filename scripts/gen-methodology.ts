@@ -24,8 +24,9 @@ function table6Rows(): string {
 const lines: string[] = [];
 lines.push("# Calculation methodology");
 lines.push("");
-lines.push("Generated from `" + PACK_ID + "` (`src/engine/pack.ts`, `src/engine/r76.ts`) — not hand-written.");
-lines.push("Regenerate: `npx tsx scripts/gen-methodology.ts`.");
+lines.push("Generated from `" + PACK_ID + "` (`src/engine/pack.ts`, `src/engine/r76.ts`).");
+lines.push("Table 6 and the procedure list come from those files. Clause strings are the hand-written map in `src/lib/reports/explainer.ts`.");
+lines.push("Regenerate: `pnpm exec tsx scripts/gen-methodology.ts`.");
 lines.push("");
 lines.push("## MPE — OIML R 76-1 Table 6, initial / type evaluation");
 lines.push("");
@@ -59,7 +60,7 @@ lines.push("One Next.js App Router monolith. Postgres holds instruments, evaluat
 lines.push("");
 lines.push("## Deployment");
 lines.push("");
-lines.push("Single host. Env vars in `.env` (see `.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` (production only), `DEMO_PASSWORD`. `npx prisma migrate deploy` then `npx prisma db seed` on first boot.");
+lines.push("Single host. Env vars in `.env` (see `.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` (production only), `DEMO_PASSWORD`. `pnpm exec prisma migrate deploy` then `pnpm exec prisma db seed` on first boot.");
 lines.push("");
 
 writeFileSync(new URL("../METHODOLOGY.md", import.meta.url), lines.join("\n") + "\n");
