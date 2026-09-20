@@ -194,7 +194,7 @@ export function zeroReturnResult(residual: Decimal, e: Decimal): { passed: boole
   return { passed: r.abs().lte(allowed), residual: r, allowed };
 }
 
-/** A.4.5 creep: |I30−I0| ≤ 0.5 MPE; |I30−I15| ≤ 0.2 MPE. */
+/** A.4.11.1 / 3.9.4.1: official early-stop is 0.5e / 0.2e. Pack still uses 0.5 / 0.2 MPE. */
 export function creepResult(
   load: Decimal,
   i0: Decimal,
