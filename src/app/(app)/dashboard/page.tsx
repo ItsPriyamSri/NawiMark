@@ -1,22 +1,43 @@
 import Link from "next/link";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { shortVerdict, type Verdict } from "@/lib/reports/explainer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string | string[]; q?: string | string[] }>;
 }) {
-  const { status } = await searchParams;
+  const params = await searchParams;
+  const status = typeof params.status === "string" ? params.status : undefined;
+  const q = typeof params.q === "string" ? params.q.trim().slice(0, 80) || undefined : undefined;
+
+  // Testers see their own instruments' evaluations; reviewers see the whole desk.
+  const session = await auth();
+  const mine = session?.user.role === "TESTER" ? { createdById: session.user.id } : {};
+  const search = q
+    ? {
+        OR: [
+          { manufacturer: { contains: q, mode: "insensitive" as const } },
+          { model: { contains: q, mode: "insensitive" as const } },
+        ],
+      }
+    : {};
 
   const [inProcess, completed, evaluations] = await Promise.all([
-    db.evaluation.count({ where: { status: "IN_PROCESS" } }),
-    db.evaluation.count({ where: { status: "COMPLETED" } }),
+    db.evaluation.count({ where: { status: "IN_PROCESS", instrument: mine } }),
+    db.evaluation.count({ where: { status: "COMPLETED", instrument: mine } }),
     db.evaluation.findMany({
-      where: status === "in_process" ? { status: "IN_PROCESS" } : status === "completed" ? { status: "COMPLETED" } : undefined,
-      include: { instrument: true },
+      where: {
+        ...(status === "in_process" ? { status: "IN_PROCESS" as const } : status === "completed" ? { status: "COMPLETED" as const } : {}),
+        instrument: { ...mine, ...search },
+      },
+      include: { instrument: true, procedures: { select: { key: true, status: true } } },
       orderBy: { id: "desc" },
       take: 50,
     }),
@@ -36,10 +57,17 @@ export default async function DashboardPage({
       </div>
 
       <Card className="rounded-xs border border-border">
-        <CardHeader className="py-3 px-4">
+        <CardHeader className="py-3 px-4 flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Evaluations{status ? ` — ${status.replace("_", " ")}` : ""}
           </CardTitle>
+          <form action="/dashboard" className="flex gap-2">
+            {status ? <input type="hidden" name="status" value={status} /> : null}
+            <Input type="search" name="q" defaultValue={q ?? ""} placeholder="Manufacturer or model" aria-label="Search evaluations" className="h-8 w-48 text-xs" />
+            <Button type="submit" variant="outline" size="sm">
+              Search
+            </Button>
+          </form>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -47,6 +75,7 @@ export default async function DashboardPage({
               <TableRow>
                 <TableHead>Instrument</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Result</TableHead>
                 <TableHead>Decision</TableHead>
                 <TableHead className="text-right pr-4">Action</TableHead>
               </TableRow>
@@ -57,9 +86,15 @@ export default async function DashboardPage({
                   <TableCell className="font-medium text-foreground">
                     <span className="font-bold">{e.instrument.manufacturer}</span>{" "}
                     <span className="font-mono text-xs text-muted-foreground">{e.instrument.model}</span>
+                    <span className="block font-mono text-[10px] text-muted-foreground">
+                      {e.id.slice(-8)} · {e.packId}
+                    </span>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground font-mono">
                     {e.status === "COMPLETED" ? "Completed" : "In process"}
+                  </TableCell>
+                  <TableCell>
+                    <VerdictBadge verdict={shortVerdict(e.procedures)} />
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -82,8 +117,8 @@ export default async function DashboardPage({
               ))}
               {evaluations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                    No evaluations recorded.
+                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                    {q ? `No evaluations match “${q}”.` : "No evaluations recorded."}
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -93,6 +128,11 @@ export default async function DashboardPage({
       </Card>
     </div>
   );
+}
+
+function VerdictBadge({ verdict }: { verdict: Verdict }) {
+  const variant = verdict === "PASS" ? "success" : verdict === "INCOMPLETE" ? "outline" : "destructive";
+  return <Badge variant={variant}>{verdict}</Badge>;
 }
 
 function StatCard({ label, value, href, active }: { label: string; value: number; href: string; active?: boolean }) {

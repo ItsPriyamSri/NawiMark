@@ -21,12 +21,12 @@ _TABLE6 = {
     "IIII": ((50, Decimal("0.5")), (200, Decimal("1.0")), (1000, Decimal("1.5"))),
 }
 
-# Table 3 n=Max/e, simplified n-only (not e-split sub-rows). I: n≥50000 (tiny-d omitted).
-_N_BOUNDS = {
-    "I": (50000, None),
-    "II": (100, 100000),
-    "III": (100, 10000),
-    "IIII": (100, 1000),
+# Table 3 rows: (e from, e to or None, n min, n max or None). 3.4.4 class I exception omitted.
+_TABLE3 = {
+    "I": (("0.001", None, 50000, None),),
+    "II": (("0.001", "0.05", 100, 100000), ("0.1", None, 5000, 100000)),
+    "III": (("0.1", "2", 100, 10000), ("5", None, 500, 10000)),
+    "IIII": (("5", None, 100, 1000),),
 }
 
 
@@ -78,15 +78,18 @@ def eccentricity_result(true_load, indications_by_position, class_, e):
 
 
 def validate_instrument(class_, Max, e):
-    """Return n=Max/e. Raise cannot-compute if Table 3 n-bounds fail (simplified)."""
+    """Return n=Max/e. Raise cannot-compute if the class/e/n row of Table 3 fails."""
     Max, e = _d(Max), _d(e)
-    if class_ not in _N_BOUNDS or e <= 0 or Max <= 0:
+    if class_ not in _TABLE3 or e <= 0 or Max <= 0:
         raise ValueError("cannot-compute: bad class/Max/e")
     n = Max / e
     if n != n.to_integral_value():
         raise ValueError("cannot-compute: n=Max/e is not an integer")
     n = int(n)
-    lo, hi = _N_BOUNDS[class_]
+    row = next((r for r in _TABLE3[class_] if e >= Decimal(r[0]) and (r[1] is None or e <= Decimal(r[1]))), None)
+    if row is None:
+        raise ValueError(f"cannot-compute: e={e} g is not allowed for class {class_} (R-76 Table 3)")
+    lo, hi = row[2], row[3]
     if n < lo or (hi is not None and n > hi):
         span = f"{lo}–{hi}" if hi is not None else f"≥{lo}"
         raise ValueError(f"cannot-compute: class {class_} n={n} outside {span} (R-76 Table 3)")

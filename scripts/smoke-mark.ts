@@ -18,8 +18,8 @@ async function main() {
   const evaluation =
     candidates.find((e) => {
       const ecc = e.procedures.find((p) => p.key === "ECCENTRICITY");
-      const payload = ecc?.payloadJson as { positions?: { C?: string } } | null;
-      return payload?.positions?.C === "10011";
+      const payload = ecc?.payloadJson as { positions?: { C?: { dL?: string } } } | null;
+      return payload?.positions?.C?.dL === "4";
     }) ?? candidates[0];
   if (!evaluation) throw new Error("no NW-30 evaluation to smoke");
   await markEvaluation(evaluation.id);

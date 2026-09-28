@@ -7,9 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 export default async function InstrumentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string | string[] }>;
 }) {
-  const { q } = await searchParams;
+  const raw = (await searchParams).q;
+  const q = typeof raw === "string" ? raw.trim().slice(0, 80) || undefined : undefined;
   const instruments = await db.instrument.findMany({
     where: q
       ? {

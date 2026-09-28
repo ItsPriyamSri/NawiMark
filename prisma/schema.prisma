@@ -46,6 +46,9 @@ enum ProcedureKey {
   EMC
   CONSTRUCTION
   CHECKLIST
+  ZERO_SETTING
+  TARE_SETTING
+  STATIC_TEMP
 }
 
 enum ProcedureStatus {
@@ -54,6 +57,7 @@ enum ProcedureStatus {
   MARKED_PASS
   MARKED_FAIL
   CANNOT_COMPUTE
+  NOT_APPLICABLE
 }
 
 model User {
@@ -71,6 +75,10 @@ model Instrument {
   maxG         String // Decimal as string
   eG           String
   n            Int?
+  serialNo     String?
+  minG         String? // Min; checked against Table 3 lower limit on create
+  unomV        String? // nominal mains voltage for A.5.4
+  specs        String? // free-text technical parameters (load cells, platform size, tare range…)
   createdById  String
   evaluations  Evaluation[]
 }
@@ -84,6 +92,7 @@ model Evaluation {
   tempC          String?
   rhPct          String?
   observer       String?
+  resolutionG    String? // R 76-2 "resolution during test"; > 0.2e needs ΔL per reading
   reviewDecision ReviewDecision @default(NONE)
   reviewNote     String?
   reviewerId     String?

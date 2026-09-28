@@ -4,12 +4,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { ProcedureKey } from "@prisma/client";
+import { Prisma, ProcedureKey } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { markEvaluation } from "@/lib/mark";
-import { NEVER_MARK, PACK_ID, PACK_MARKS } from "@/engine/pack";
-import { WEIGHING_ROWS } from "@/lib/demo-payloads";
+import { grantable } from "@/lib/reports/explainer";
+import { NEVER_MARK, PACK_ID } from "@/engine/pack";
+import { DAMP_CONDITIONS, STATIC_CONDITIONS, WEIGHING_ROWS } from "@/lib/demo-payloads";
 
 async function requireTesterOwner(evaluationId: string) {
   const session = await auth();
@@ -27,22 +28,39 @@ async function requireTesterOwner(evaluationId: string) {
   return { session, evaluation };
 }
 
-function field(formData: FormData, name: string) {
-  return String(formData.get(name) ?? "").trim();
+/** SELECT … FOR UPDATE on the evaluation row; save-and-mark and review decisions queue on it. */
+async function lockEvaluation(tx: Prisma.TransactionClient, id: string) {
+  const rows = await tx.$queryRaw<Array<{ reviewDecision: string }>>`SELECT "reviewDecision" FROM "Evaluation" WHERE id = ${id} FOR UPDATE`;
+  return rows[0] ?? null;
 }
 
-function weighRows(formData: FormData, prefix: string, count = WEIGHING_ROWS.length) {
+/** Every form value is trimmed and capped; readings and notes never need more. */
+function field(formData: FormData, name: string, max = 200) {
+  return String(formData.get(name) ?? "").trim().slice(0, max);
+}
+
+/** A reading is the displayed indication I plus ΔL (changeover-point method). */
+function rd(formData: FormData, name: string) {
+  return { i: field(formData, name), dL: field(formData, `${name}.dL`) };
+}
+
+function weighRows(formData: FormData, prefix: string, count = WEIGHING_ROWS.length, split = count / 2) {
   return Array.from({ length: count }, (_, i) => ({
     load: field(formData, `${prefix}.${i}.load`),
-    indicated: field(formData, `${prefix}.${i}.indicated`),
-    direction: i < count / 2 ? ("up" as const) : ("down" as const),
-  })).filter((r) => r.load && r.indicated);
+    indicated: rd(formData, `${prefix}.${i}.indicated`),
+    direction: i < split ? ("up" as const) : ("down" as const),
+  })).filter((r) => r.load || r.indicated.i || r.indicated.dL); // half rows stay → cannot-compute
+}
+
+function hasData(v: unknown): boolean {
+  if (typeof v === "string") return v.length > 0;
+  if (Array.isArray(v)) return v.some(hasData);
+  if (v && typeof v === "object") return Object.values(v).some(hasData);
+  return false;
 }
 
 function objectIf(data: object) {
-  return Object.values(data).some((v) => (typeof v === "string" ? v.length > 0 : Array.isArray(v) ? v.length > 0 : v != null))
-    ? data
-    : {};
+  return hasData(data) ? data : {};
 }
 
 export async function createEvaluationAction(instrumentId: string) {
@@ -80,100 +98,142 @@ export async function saveObservationsAction(
   const tempC = field(formData, "tempC") || null;
   const rhPct = field(formData, "rhPct") || null;
   const observer = field(formData, "observer") || null;
+  const resolutionG = field(formData, "resolutionG") || null;
 
-  const extras = {
-    TARE: objectIf({ rows: weighRows(formData, "tare") }),
+  const positions = (prefix: string, keys: string[]) =>
+    Object.fromEntries(keys.map((pos) => [pos, rd(formData, `${prefix}.${pos}`)] as const).filter(([, v]) => v.i || v.dL));
+  const range = (n: number) => Array.from({ length: n }, (_, i) => i);
+
+  const payloads = {
+    WEIGHING: objectIf({ rows: weighRows(formData, "weighing") }),
+    REPEATABILITY: objectIf({
+      series: [0, 1].map((s) => ({
+        trueLoad: field(formData, `repeat.${s}.trueLoad`),
+        indications: range(10)
+          .map((i) => rd(formData, `repeat.${s}.${i}`))
+          .filter((v) => v.i || v.dL),
+      })),
+    }),
+    ECCENTRICITY: objectIf({
+      trueLoad: field(formData, "ecc.trueLoad"),
+      positions: positions("ecc", ["A", "B", "C", "D"]),
+      zero: rd(formData, "ecc.zero"),
+    }),
+    ZERO_SETTING: objectIf({
+      load: field(formData, "zeroset.load"),
+      trials: range(5).map((i) => rd(formData, `zeroset.${i}`)),
+    }),
+    TARE: objectIf({
+      notApplicable: field(formData, "waive.TARE", 300),
+      tare: field(formData, "tare.value"),
+      rows: weighRows(formData, "tare", 12, 6),
+    }),
+    TARE_SETTING: objectIf({
+      notApplicable: field(formData, "waive.TARE_SETTING", 300),
+      tare: field(formData, "tareset.tare"),
+      load: field(formData, "tareset.load"),
+      trials: range(5).map((i) => rd(formData, `tareset.${i}`)),
+    }),
     DISCRIMINATION: objectIf({
-      indicatedBefore: field(formData, "disc.before"),
-      indicatedAfter: field(formData, "disc.after"),
-      extraLoad: field(formData, "disc.extra"),
+      rows: range(3)
+        .map((i) => ({
+          load: field(formData, `disc.${i}.load`),
+          before: field(formData, `disc.${i}.before`),
+          after: field(formData, `disc.${i}.after`),
+          extra: field(formData, `disc.${i}.extra`),
+        }))
+        .filter((r) => r.load || r.before || r.after),
     }),
-    SENSITIVITY: objectIf({
-      indicatedBefore: field(formData, "sens.before"),
-      indicatedAfter: field(formData, "sens.after"),
-      extraLoad: field(formData, "sens.extra"),
-    }),
-    ZERO_RETURN: objectIf({ residual: field(formData, "zero.residual") }),
+    ZERO_RETURN: objectIf({ before: rd(formData, "zero.before"), after: rd(formData, "zero.after") }),
     CREEP: objectIf({
       load: field(formData, "creep.load"),
-      i0: field(formData, "creep.i0"),
-      i15: field(formData, "creep.i15"),
-      i30: field(formData, "creep.i30"),
+      i0: rd(formData, "creep.i0"),
+      i15: rd(formData, "creep.i15"),
+      i30: rd(formData, "creep.i30"),
+      i240: rd(formData, "creep.i240"),
     }),
-    STABILITY: objectIf({ i1: field(formData, "stab.i1"), i2: field(formData, "stab.i2") }),
+    STABILITY: objectIf({
+      trials: range(5)
+        .map((i) => ({
+          printed: field(formData, `stab.${i}.printed`),
+          min: field(formData, `stab.${i}.min`),
+          max: field(formData, `stab.${i}.max`),
+        }))
+        .filter((t) => t.printed || t.min || t.max),
+    }),
     TILT: objectIf({
-      noLoadLevel: field(formData, "tilt.noLoadLevel"),
-      noLoadTilt: field(formData, "tilt.noLoadTilt"),
-      load: field(formData, "tilt.load"),
-      indicatedTilt: field(formData, "tilt.indicatedTilt"),
+      notApplicable: field(formData, "waive.TILT", 300),
+      noLoad: { ref: rd(formData, "tilt.0.ref"), tilts: range(4).map((d) => rd(formData, `tilt.0.t${d}`)) },
+      loads: [1, 2]
+        .map((i) => ({
+          load: field(formData, `tilt.${i}.load`),
+          ref: rd(formData, `tilt.${i}.ref`),
+          tilts: range(4).map((d) => rd(formData, `tilt.${i}.t${d}`)),
+        }))
+        .filter((l) => l.load || l.ref.i || l.tilts.some((t) => t.i)),
     }),
     WARMUP: objectIf({
-      zeros: [0, 1, 2].map((i) => field(formData, `warmup.zero.${i}`)).filter(Boolean),
       load: field(formData, "warmup.load"),
-      indicated: [0, 1].map((i) => field(formData, `warmup.ind.${i}`)).filter(Boolean),
+      rows: [0, 5, 15, 30]
+        .map((minute, i) => ({
+          minute: String(minute),
+          zero: rd(formData, `warmup.${i}.zero`),
+          loaded: rd(formData, `warmup.${i}.loaded`),
+        }))
+        .filter((r) => r.zero.i || r.loaded.i),
     }),
     VOLTAGE: objectIf({
-      rows: [0, 1, 2, 3, 4, 5]
+      rows: range(6)
         .map((i) => ({
           voltage: field(formData, `volt.${i}.voltage`),
           load: field(formData, `volt.${i}.load`),
-          indicated: field(formData, `volt.${i}.indicated`),
+          indicated: rd(formData, `volt.${i}.indicated`),
         }))
-        .filter((r) => r.voltage && r.load && r.indicated),
+        .filter((r) => r.voltage || r.load || r.indicated.i),
     }),
     TEMP_NOLOAD: objectIf({
-      readings: [0, 1, 2]
-        .map((i) => ({
-          tempC: field(formData, `tnl.${i}.tempC`),
-          zero: field(formData, `tnl.${i}.zero`),
-        }))
-        .filter((r) => r.tempC && r.zero),
+      readings: range(5)
+        .map((i) => ({ tempC: field(formData, `tnl.${i}.tempC`), zero: rd(formData, `tnl.${i}.zero`) }))
+        .filter((r) => r.tempC || r.zero.i),
     }),
-    DAMP_HEAT: objectIf({ rows: weighRows(formData, "damp") }),
+    DAMP_HEAT: objectIf({
+      conditions: DAMP_CONDITIONS.map((label, c) => ({
+        label,
+        tempC: field(formData, `damp.${c}.tempC`),
+        rhPct: field(formData, `damp.${c}.rhPct`),
+        rows: weighRows(formData, `damp.${c}`, 10, 5),
+      })),
+    }),
+    STATIC_TEMP: objectIf({
+      conditions: range(5).map((c) => ({
+        label: STATIC_CONDITIONS[c],
+        tempC: field(formData, `st.${c}.tempC`),
+        rows: weighRows(formData, `st.${c}`, 10, 5),
+      })),
+    }),
     SPAN_STABILITY: objectIf({
-      indications: [0, 1, 2].map((i) => field(formData, `span.${i}`)).filter(Boolean),
+      load: field(formData, "span.load"),
+      indications: range(8)
+        .map((i) => rd(formData, `span.${i}`))
+        .filter((v) => v.i || v.dL),
     }),
     ENDURANCE: objectIf({
-      before: { rows: weighRows(formData, "end.before", 4) },
-      after: { rows: weighRows(formData, "end.after", 4) },
+      before: { rows: weighRows(formData, "end.before", 5, 5) },
+      after: { rows: weighRows(formData, "end.after", 5, 5) },
     }),
     ROLLING_ECC: objectIf({
+      notApplicable: field(formData, "waive.ROLLING_ECC", 300),
       trueLoad: field(formData, "roll.trueLoad"),
-      positions: Object.fromEntries(
-        ["A", "B", "C", "D", "E", "F"]
-          .map((pos) => [pos, field(formData, `roll.${pos}`)] as const)
-          .filter(([, v]) => v),
-      ),
+      positions: positions("roll", ["A", "B", "C", "D", "E", "F"]),
     }),
   };
 
-  const eccPositions: Record<string, string> = {};
-  for (const pos of ["A", "B", "C", "D"]) {
-    const v = field(formData, `ecc.${pos}`);
-    if (v) eccPositions[pos] = v;
-  }
+  const decided = await db.$transaction(async (tx) => {
+    const locked = await lockEvaluation(tx, evaluationId);
+    if (!locked || locked.reviewDecision !== "NONE") return true;
+    await tx.evaluation.update({ where: { id: evaluationId }, data: { tempC, rhPct, observer, resolutionG } });
 
-  await db.$transaction(async (tx) => {
-    await tx.evaluation.update({ where: { id: evaluationId }, data: { tempC, rhPct, observer } });
-    await tx.procedure.updateMany({
-      where: { evaluationId, key: "WEIGHING" },
-      data: { payloadJson: objectIf({ rows: weighRows(formData, "weighing") }) },
-    });
-    await tx.procedure.updateMany({
-      where: { evaluationId, key: "REPEATABILITY" },
-      data: {
-        payloadJson: objectIf({
-          trueLoad: field(formData, "repeat.trueLoad"),
-          indications: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => field(formData, `repeat.${i}`)).filter(Boolean),
-        }),
-      },
-    });
-    await tx.procedure.updateMany({
-      where: { evaluationId, key: "ECCENTRICITY" },
-      data: { payloadJson: objectIf({ trueLoad: field(formData, "ecc.trueLoad"), positions: eccPositions }) },
-    });
-
-    for (const [key, payloadJson] of Object.entries(extras)) {
+    for (const [key, payloadJson] of Object.entries(payloads)) {
       await tx.procedure.updateMany({
         where: { evaluationId, key: key as ProcedureKey },
         data: { payloadJson },
@@ -182,7 +242,7 @@ export async function saveObservationsAction(
 
     for (const key of NEVER_MARK) {
       const entered = formData.get(`entered.${key}`) === "on";
-      const note = field(formData, `note.${key}`);
+      const note = field(formData, `note.${key}`, 500);
       await tx.procedure.updateMany({
         where: { evaluationId, key },
         data: {
@@ -191,9 +251,11 @@ export async function saveObservationsAction(
         },
       });
     }
-  });
+    await markEvaluation(evaluationId, tx);
+    return false;
+  }, { timeout: 30000 });
+  if (decided) return { error: "This evaluation was decided while you were editing; nothing was saved." };
 
-  await markEvaluation(evaluationId);
   revalidatePath(`/evaluations/${evaluationId}`);
   redirect(`/evaluations/${evaluationId}/result`);
 }
@@ -218,29 +280,29 @@ export async function reviewDecisionAction(
   const decision = field(formData, "decision");
   if (decision !== "GRANTED" && decision !== "REFUSED") return { error: "Pick Grant or Refuse." };
 
-  if (decision === "GRANTED") {
-    const procedures = await db.procedure.findMany({ where: { evaluationId } });
-    const marks = procedures.filter((p) => (PACK_MARKS as readonly string[]).includes(p.key));
-    const missing = PACK_MARKS.some((k) => !marks.find((p) => p.key === k));
-    const blocked = missing || marks.some((p) => p.status !== "MARKED_PASS");
-    if (blocked) {
-      return { error: "cannot-grant: every numeric pack mark must be MARKED_PASS and present." };
-    }
-  }
+  const reviewNote = field(formData, "reviewNote", 500) || null;
 
-  const reviewNote = field(formData, "reviewNote") || null;
-
-  const updated = await db.evaluation.updateMany({
-    where: { id: evaluationId, reviewDecision: "NONE" },
-    data: {
-      reviewDecision: decision,
-      reviewNote,
-      reviewerId: session.user.id,
-      reviewedAt: new Date(),
-      status: "COMPLETED",
+  // One transaction holding the evaluation row lock: a tester's save-and-mark
+  // (same lock) cannot land between the re-mark, the Grant check and the decision.
+  const error = await db.$transaction(
+    async (tx) => {
+      const locked = await lockEvaluation(tx, evaluationId);
+      if (!locked) return "Evaluation not found.";
+      if (locked.reviewDecision !== "NONE") return "Already decided.";
+      if (decision === "GRANTED") {
+        // Re-mark first: Grant rests on the current pack and the latest readings.
+        const { procedures } = await markEvaluation(evaluationId, tx);
+        if (!grantable(procedures)) return "cannot-grant: every applicable numeric pack mark must be MARKED_PASS.";
+      }
+      await tx.evaluation.update({
+        where: { id: evaluationId },
+        data: { reviewDecision: decision, reviewNote, reviewerId: session.user.id, reviewedAt: new Date(), status: "COMPLETED" },
+      });
+      return null;
     },
-  });
-  if (updated.count === 0) return { error: "Already decided." };
+    { timeout: 30000 },
+  );
+  if (error) return { error };
 
   revalidatePath(`/evaluations/${evaluationId}/result`);
   redirect(`/evaluations/${evaluationId}/result`);

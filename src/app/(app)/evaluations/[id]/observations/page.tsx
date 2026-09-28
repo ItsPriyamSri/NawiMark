@@ -2,7 +2,16 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { NEVER_MARK, RH_MAX, RH_MIN, TEMP_MAX, TEMP_MIN } from "@/engine/pack";
+import {
+  NEVER_MARK,
+  PACK_MARKS,
+  PROCEDURE_LABELS,
+  RH_MAX,
+  RH_MIN,
+  TEMP_MAX,
+  TEMP_MIN,
+  notApplicableReason,
+} from "@/engine/pack";
 import { ObservationsForm } from "./form";
 
 export default async function ObservationsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +26,7 @@ export default async function ObservationsPage({ params }: { params: Promise<{ i
     redirect(`/evaluations/${id}/result`);
   }
 
+  const { instrument } = evaluation;
   const byKey = Object.fromEntries(evaluation.procedures.map((p) => [p.key, p]));
   const payload = (key: string) => byKey[key]?.payloadJson as Record<string, unknown> | undefined;
 
@@ -44,15 +54,23 @@ export default async function ObservationsPage({ params }: { params: Promise<{ i
       <ObservationsForm
         evaluationId={id}
         locked={evaluation.reviewDecision !== "NONE"}
-        env={{ tempC: evaluation.tempC ?? "", rhPct: evaluation.rhPct ?? "", observer: evaluation.observer ?? "" }}
+        e={instrument.eG}
+        env={{
+          tempC: evaluation.tempC ?? "",
+          rhPct: evaluation.rhPct ?? "",
+          observer: evaluation.observer ?? "",
+          resolutionG: evaluation.resolutionG ?? "",
+        }}
         weighing={payload("WEIGHING") as never}
         tare={payload("TARE") as never}
         damp={payload("DAMP_HEAT") as never}
+        staticTemp={payload("STATIC_TEMP") as never}
+        zeroSet={payload("ZERO_SETTING") as never}
+        tareSet={payload("TARE_SETTING") as never}
         repeat={payload("REPEATABILITY") as never}
         ecc={payload("ECCENTRICITY") as never}
         roll={payload("ROLLING_ECC") as never}
         disc={payload("DISCRIMINATION") as never}
-        sens={payload("SENSITIVITY") as never}
         zero={payload("ZERO_RETURN") as never}
         creep={payload("CREEP") as never}
         stab={payload("STABILITY") as never}
@@ -62,10 +80,15 @@ export default async function ObservationsPage({ params }: { params: Promise<{ i
         tnl={payload("TEMP_NOLOAD") as never}
         span={payload("SPAN_STABILITY") as never}
         endurance={payload("ENDURANCE") as never}
+        notApplicable={PACK_MARKS.flatMap((key) => {
+          const reason = notApplicableReason(key, instrument.class, instrument.maxG, instrument.eG);
+          return reason ? [{ key, label: PROCEDURE_LABELS[key] ?? key, reason }] : [];
+        })}
         never={evaluation.procedures
           .filter((p) => (NEVER_MARK as readonly string[]).includes(p.key))
           .map((p) => ({
             key: p.key,
+            label: PROCEDURE_LABELS[p.key] ?? p.key,
             entered: p.status === "ENTERED_NOT_MARKED",
             note: (p.payloadJson as { note?: string } | null)?.note ?? "",
           }))}

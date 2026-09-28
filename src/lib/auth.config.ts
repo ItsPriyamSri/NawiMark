@@ -15,15 +15,9 @@ declare module "next-auth" {
   }
 }
 
-// Augmenting against @auth/core/jwt (not the "next-auth/jwt" re-export) —
-// under this project's "bundler" moduleResolution, `declare module` fails to
-// resolve the next-auth subpath even though a plain import of it works fine.
-declare module "@auth/core/jwt" {
-  interface JWT {
-    id: string;
-    role: Role;
-  }
-}
+// No JWT augmentation: @auth/core is not a direct dependency, so pnpm cannot
+// resolve `declare module "@auth/core/jwt"` and `next build` fails. The two
+// fields are written in jwt() below and narrowed where session() reads them.
 
 // Edge-safe config: no Prisma/bcrypt here (providers added in auth.ts),
 // so this can be imported directly by middleware without pulling a
@@ -50,8 +44,8 @@ export const authConfig = {
       return token;
     },
     session({ session, token }) {
-      session.user.id = token.id;
-      session.user.role = token.role;
+      session.user.id = token.id as string;
+      session.user.role = token.role as Role;
       return session;
     },
     authorized({ auth }) {

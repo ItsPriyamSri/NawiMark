@@ -3,13 +3,14 @@
 import { useState } from "react";
 import type { Procedure, ProcedureKey, ProcedureStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
-import { PACK_ID, PROCEDURE_LABELS } from "@/engine/pack";
+import { NEVER_MARK, PACK_ID, PACK_MARKS, PROCEDURE_LABELS } from "@/engine/pack";
 import { explainProcedure, type MpeView } from "@/lib/reports/explainer";
 
 const STATUS_VARIANT = {
   MARKED_PASS: "success",
   MARKED_FAIL: "destructive",
   CANNOT_COMPUTE: "destructive",
+  NOT_APPLICABLE: "outline",
   ENTERED_NOT_MARKED: "secondary",
   EMPTY: "outline",
 } as const;
@@ -18,6 +19,7 @@ const STATUS_LABEL: Record<ProcedureStatus, string> = {
   MARKED_PASS: "PASS",
   MARKED_FAIL: "FAIL",
   CANNOT_COMPUTE: "cannot-compute",
+  NOT_APPLICABLE: "not applicable",
   ENTERED_NOT_MARKED: "entered, not marked",
   EMPTY: "not entered",
 };
@@ -28,15 +30,23 @@ export function ResultMarks({
   packId = PACK_ID,
   passCount = 0,
   inspectorCount = 0,
+  notApplicableCount = 0,
+  complete = false,
 }: {
   procedures: Array<Pick<Procedure, "id" | "key" | "status" | "resultJson">>;
   failedKeys: ProcedureKey[];
   packId?: string;
   passCount?: number;
   inspectorCount?: number;
+  notApplicableCount?: number;
+  /** every applicable numeric mark is PASS */
+  complete?: boolean;
 }) {
   const [view, setView] = useState<MpeView>("initial");
-  const ordered = [...procedures].sort((a, b) => rank(a.status) - rank(b.status));
+  const order = [...PACK_MARKS, ...NEVER_MARK] as readonly string[];
+  const ordered = [...procedures].sort(
+    (a, b) => rank(a.status) - rank(b.status) || order.indexOf(a.key) - order.indexOf(b.key),
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -59,7 +69,7 @@ export function ResultMarks({
           data-explainer="type-eval-fail"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-current/15 pb-2">
-            <h2>{view === "in-service" ? "Would pass on 2× — we still refuse" : "Fail"}</h2>
+            <h2>{view === "in-service" ? "Shown on shop 2× — stored mark unchanged" : "Fail"}</h2>
             <span className="font-mono text-[11px] uppercase tracking-wider font-semibold opacity-85">
               {view === "in-service" ? "2× Table 6 in-service inspection" : "Table 6 initial evaluation"}
             </span>
@@ -81,7 +91,7 @@ export function ResultMarks({
             );
           })}
         </section>
-      ) : procedures.some((p) => p.status === "CANNOT_COMPUTE") ? null : (
+      ) : procedures.some((p) => p.status === "CANNOT_COMPUTE") ? null : complete ? (
         <section className="pass-card stamp-anim">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-current/15 pb-2">
             <h2>Pass</h2>
@@ -90,8 +100,16 @@ export function ResultMarks({
             </span>
           </div>
           <p className="text-xs sm:text-sm leading-relaxed pt-1">
-            {passCount} numeric pack marks within initial-band MPE
+            {passCount} numeric pack marks within their R 76-1 limits
+            {notApplicableCount ? `; ${notApplicableCount} not applicable` : ""}
             {inspectorCount ? `; ${inspectorCount} left to inspector judgement` : ""}.
+          </p>
+        </section>
+      ) : (
+        <section className="sheet px-4 py-3">
+          <h2 className="text-sm font-bold">Incomplete</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground pt-1">
+            {passCount} numeric marks pass so far. Every applicable sheet needs readings before a verdict or a grant.
           </p>
         </section>
       )}
@@ -119,5 +137,6 @@ function rank(status: ProcedureStatus | string) {
   if (status === "MARKED_FAIL" || status === "CANNOT_COMPUTE") return 0;
   if (status === "ENTERED_NOT_MARKED") return 1;
   if (status === "EMPTY") return 2;
+  if (status === "NOT_APPLICABLE") return 4;
   return 3;
 }

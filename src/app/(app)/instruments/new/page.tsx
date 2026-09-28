@@ -12,6 +12,7 @@ const initialState: CreateInstrumentState = { error: null };
 
 export default function NewInstrumentPage() {
   const [state, formAction, pending] = useActionState(createInstrumentAction, initialState);
+  const v = state.values ?? {};
 
   return (
     <div className="flex flex-col gap-4 max-w-lg">
@@ -36,13 +37,13 @@ export default function NewInstrumentPage() {
               <Label htmlFor="manufacturer" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Manufacturer
               </Label>
-              <Input id="manufacturer" name="manufacturer" placeholder="e.g. DemoCo" required />
+              <Input id="manufacturer" name="manufacturer" placeholder="e.g. DemoCo" required defaultValue={v.manufacturer} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="model" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Model
               </Label>
-              <Input id="model" name="model" placeholder="e.g. NW-30" required />
+              <Input id="model" name="model" placeholder="e.g. NW-30" required defaultValue={v.model} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="class" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -52,7 +53,7 @@ export default function NewInstrumentPage() {
                 id="class"
                 name="class"
                 required
-                defaultValue="III"
+                defaultValue={v.class ?? "III"}
                 className="h-8 w-full rounded-xs border border-input bg-card/60 px-2.5 text-sm outline-none transition-all duration-150 hover:border-[#aab5a4] focus-visible:border-primary focus-visible:bg-card focus-visible:ring-2 focus-visible:ring-primary/20"
               >
                 <option value="I">Class I (Special)</option>
@@ -66,14 +67,33 @@ export default function NewInstrumentPage() {
                 <Label htmlFor="maxG" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Max (g)
                 </Label>
-                <Input id="maxG" name="maxG" inputMode="decimal" placeholder="30000" required />
+                <Input id="maxG" name="maxG" inputMode="decimal" placeholder="30000" required defaultValue={v.maxG} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="eG" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   e (g)
                 </Label>
-                <Input id="eG" name="eG" inputMode="decimal" placeholder="10" required />
+                <Input id="eG" name="eG" inputMode="decimal" placeholder="10" required defaultValue={v.eG} />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <OptionalField id="minG" label="Min (g)" placeholder="200" inputMode="decimal" value={v.minG} />
+              <OptionalField id="unomV" label="Nominal voltage Unom (V)" placeholder="230" inputMode="decimal" value={v.unomV} />
+            </div>
+            <OptionalField id="serialNo" label="Serial / sample no." placeholder="e.g. NW30-0001" value={v.serialNo} />
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="specs" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Other technical parameters (optional)
+              </Label>
+              <textarea
+                id="specs"
+                name="specs"
+                rows={3}
+                maxLength={1000}
+                defaultValue={v.specs}
+                placeholder="Load cells, platform size, tare range, zero-setting range, display, power supply…"
+                className="w-full rounded-xs border border-input bg-card/60 px-2.5 py-1.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+              />
             </div>
             {state.error ? (
               <p className="rounded-2xs border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs font-medium text-destructive" role="alert">
@@ -88,6 +108,29 @@ export default function NewInstrumentPage() {
           </form>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function OptionalField({
+  id,
+  label,
+  placeholder,
+  inputMode,
+  value,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  inputMode?: "decimal";
+  value?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id} className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </Label>
+      <Input id={id} name={id} inputMode={inputMode} placeholder={placeholder} defaultValue={value} />
     </div>
   );
 }

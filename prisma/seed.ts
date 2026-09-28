@@ -11,7 +11,14 @@ import { Decimal } from "decimal.js";
 import { PrismaClient, ProcedureKey } from "@prisma/client";
 import { PACK_ID } from "../src/engine/pack";
 import { validateInstrument } from "../src/engine/r76";
-import { ECC_NEAR_MISS, ECC_PASS, REPEAT_PASS, WEIGHING_ROWS, extraNumericPayloads } from "../src/lib/demo-payloads";
+import {
+  DEMO_RESOLUTION_G,
+  ECC_NEAR_MISS,
+  ECC_PASS,
+  REPEAT_PASS,
+  WEIGHING_ROWS,
+  extraNumericPayloads,
+} from "../src/lib/demo-payloads";
 
 const db = new PrismaClient();
 
@@ -25,23 +32,20 @@ const DEMO_PASSWORD = requireEnv("DEMO_PASSWORD");
 const NEVER: ProcedureKey[] = ["EMC", "CONSTRUCTION", "CHECKLIST"];
 
 function numericCreates(ecc: typeof ECC_NEAR_MISS | typeof ECC_PASS) {
-  const extra = extraNumericPayloads();
-  return [
-    { key: "WEIGHING" as const, status: "ENTERED_NOT_MARKED" as const, payloadJson: { rows: WEIGHING_ROWS } },
-    { key: "REPEATABILITY" as const, status: "ENTERED_NOT_MARKED" as const, payloadJson: REPEAT_PASS },
-    { key: "ECCENTRICITY" as const, status: "ENTERED_NOT_MARKED" as const, payloadJson: ecc },
-    ...Object.entries(extra).map(([key, payloadJson]) => ({
-      key: key as ProcedureKey,
-      status: "ENTERED_NOT_MARKED" as const,
-      payloadJson,
-    })),
-    ...NEVER.map((key) => ({
-      key,
-      status: "ENTERED_NOT_MARKED" as const,
-      payloadJson: { note: "Mocked inspector ticks only. Not marked. Never auto-PASS." },
-    })),
-  ];
+  const payloads: Partial<Record<ProcedureKey, object>> = {
+    WEIGHING: { rows: WEIGHING_ROWS },
+    REPEATABILITY: REPEAT_PASS,
+    ECCENTRICITY: ecc,
+    ...extraNumericPayloads(),
+  };
+  return Object.values(ProcedureKey).map((key) =>
+    NEVER.includes(key)
+      ? { key, status: "ENTERED_NOT_MARKED" as const, payloadJson: { note: "Mocked inspector ticks only. Not marked. Never auto-PASS." } }
+      : { key, status: "EMPTY" as const, payloadJson: payloads[key] ?? {} },
+  );
 }
+
+const LAB = { tempC: "20", rhPct: "50", resolutionG: DEMO_RESOLUTION_G, observer: "Demo (mocked data)" };
 
 async function main() {
   await db.procedure.deleteMany();
@@ -72,6 +76,10 @@ async function main() {
       maxG: "30000",
       eG: "10",
       n: legalN,
+      minG: "200",
+      unomV: "230",
+      serialNo: "NW30-DEMO-0001 (mocked)",
+      specs: "Single load cell, 350 × 450 mm platform, subtractive tare to Max, LCD d = e. Mocked demo instrument.",
       createdById: tester.id,
     },
   });
@@ -100,9 +108,7 @@ async function main() {
     data: {
       instrumentId: instrument.id,
       packId: PACK_ID,
-      tempC: "20",
-      rhPct: "50",
-      observer: "Demo",
+      ...LAB,
       procedures: { create: numericCreates(ECC_NEAR_MISS) },
     },
   });
@@ -111,9 +117,7 @@ async function main() {
     data: {
       instrumentId: instrument.id,
       packId: PACK_ID,
-      tempC: "20",
-      rhPct: "50",
-      observer: "Demo",
+      ...LAB,
       procedures: { create: numericCreates(ECC_PASS) },
     },
   });
@@ -122,9 +126,7 @@ async function main() {
     data: {
       instrumentId: junk.id,
       packId: PACK_ID,
-      tempC: "20",
-      rhPct: "50",
-      observer: "Demo",
+      ...LAB,
       procedures: {
         create: Object.values(ProcedureKey).map((key) => ({
           key,

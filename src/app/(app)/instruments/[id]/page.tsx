@@ -77,6 +77,25 @@ export default async function InstrumentDetailPage({
             </div>
           </div>
 
+          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            {[
+              ["Min", instrument.minG ? `${instrument.minG} g` : "—"],
+              ["Unom", instrument.unomV ? `${instrument.unomV} V` : "—"],
+              ["Serial / sample", instrument.serialNo ?? "—"],
+            ].map(([k, v]) => (
+              <div key={k}>
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{k}</dt>
+                <dd className="font-mono text-foreground">{v}</dd>
+              </div>
+            ))}
+            {instrument.specs ? (
+              <div className="col-span-2 sm:col-span-4">
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Other parameters</dt>
+                <dd className="text-foreground whitespace-pre-wrap">{instrument.specs}</dd>
+              </div>
+            ) : null}
+          </dl>
+
           {instrument.model === "ILLEGAL-n" ? (
             <div className="cannot-card">
               <h2 className="text-sm font-bold text-destructive mb-1">Illegal parameter combination (Table 3)</h2>

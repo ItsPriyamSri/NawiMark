@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { PACK_ID, PACK_MARKS, PROCEDURE_LABELS } from "@/engine/pack";
-import { buildShowWorking, MPE_USED_LINE } from "@/lib/reports/explainer";
+import { buildShowWorking, grantable, MPE_USED_LINE, testerWaivers } from "@/lib/reports/explainer";
 import { AttachmentForm } from "./attachments";
 import { ResultMarks } from "./band-toggle";
 import { ReviewForm } from "./review-form";
@@ -34,7 +34,8 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
   const marks = evaluation.procedures.filter((p) => (PACK_MARKS as readonly string[]).includes(p.key));
   const failedMarks = marks.filter((p) => p.status === "MARKED_FAIL");
   const cannotMarks = marks.filter((p) => p.status === "CANNOT_COMPUTE");
-  const canGrant = PACK_MARKS.every((k) => marks.find((p) => p.key === k)?.status === "MARKED_PASS");
+  const canGrant = grantable(evaluation.procedures);
+  const waivers = testerWaivers(evaluation.procedures);
   const showWorking = buildShowWorking(evaluation.procedures, "initial", packId);
   const cannotCompute = cannotMarks.length > 0;
   const decided = evaluation.reviewDecision !== "NONE";
@@ -119,7 +120,9 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
         failedKeys={failedMarks.map((p) => p.key)}
         packId={packId}
         passCount={marks.filter((p) => p.status === "MARKED_PASS").length}
+        notApplicableCount={marks.filter((p) => p.status === "NOT_APPLICABLE").length}
         inspectorCount={evaluation.procedures.filter((p) => p.status === "ENTERED_NOT_MARKED").length}
+        complete={canGrant}
       />
 
       <details className="sheet">
@@ -148,6 +151,32 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
               )}
               {row.note && row.computed && row.lines.length > 0 ? (
                 <p className="text-destructive text-xs font-mono pl-2 mt-1">{row.note}</p>
+              ) : null}
+              {row.table ? (
+                <div className="overflow-x-auto pl-2 mt-2">
+                  <table className="text-[11px] font-mono tabular-nums border-collapse">
+                    <thead>
+                      <tr>
+                        {row.table.headers.map((h, i) => (
+                          <th key={i} scope="col" className="px-2 py-1 text-left font-semibold text-muted-foreground border-b border-border">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {row.table.rows.map((cells, ri) => (
+                        <tr key={ri} className={cells.at(-1) === "NO" ? "text-destructive font-semibold" : undefined}>
+                          {cells.map((c, ci) => (
+                            <td key={ci} className="px-2 py-0.5 whitespace-nowrap">
+                              {c}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : null}
             </div>
           ))}
@@ -180,6 +209,17 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
         files={evaluation.attachments.map((a) => ({ id: a.id, filename: a.filename }))}
         canUpload={isOwnerTester && !decided}
       />
+
+      {waivers.length ? (
+        <section className="sheet px-4 py-3" aria-label="Tester waivers">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Declared not applicable by the tester</h2>
+          <ul className="pt-1.5 flex flex-col gap-1 text-xs sm:text-sm">
+            {waivers.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {isReviewer ? (
         <ReviewForm
